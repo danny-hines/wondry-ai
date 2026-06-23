@@ -11,9 +11,10 @@ artifacts/*.json
 artifacts/media/
 *.log
 
-# Piper TTS (downloaded by: npm run setup-piper)
+# Piper TTS (downloaded/created by: npm run setup-piper)
 voices/
 vendor/
+.venv-piper/
 
 # React client (Vite)
 client/node_modules/

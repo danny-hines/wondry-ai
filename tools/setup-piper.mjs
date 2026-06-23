@@ -12,6 +12,12 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const VOICES = path.join(ROOT, 'voices');
 fs.mkdirSync(VOICES, { recursive: true });
 
+// Install Piper into a dedicated venv. On Pi OS Lite / Debian Bookworm, a system
+// `pip install` is blocked (PEP 668 "externally-managed-environment"); a venv is
+// exempt and keeps the engine isolated. tts.js auto-detects this path.
+const VENV = path.join(ROOT, '.venv-piper');
+const venvPython = path.join(VENV, process.platform === 'win32' ? 'Scripts' : 'bin', process.platform === 'win32' ? 'python.exe' : 'python');
+
 // Prefer "-high" quality (much less robotic than "-medium"); a couple of well-liked
 // voices for variety. Browse more at https://rhasspy.github.io/piper-samples/
 const WANT = [
@@ -53,14 +59,27 @@ async function manualDownload(id) {
   log('Wondry — Piper setup');
   const py = findPython();
   let engineOk = false;
-  if (py) { log(`\n→ Installing piper-tts via ${py} -m pip …`); engineOk = run(py, ['-m', 'pip', 'install', '--upgrade', 'piper-tts']); }
-  else log('\n✗ Python not found. Install Python 3, then re-run — or set PIPER_CMD in .env to a piper binary.');
+  if (!py) {
+    log('\n✗ Python not found. Install Python 3, then re-run — or set PIPER_CMD in .env to a piper binary.');
+  } else {
+    if (!fs.existsSync(venvPython)) {
+      log(`\n→ Creating Piper venv at ${VENV} …`);
+      if (!run(py, ['-m', 'venv', VENV])) {
+        log('✗ Could not create the venv. On Debian/Pi: sudo apt-get install -y python3-venv, then re-run.');
+      }
+    }
+    if (fs.existsSync(venvPython)) {
+      log('\n→ Installing piper-tts into the venv …');
+      run(venvPython, ['-m', 'pip', 'install', '--upgrade', 'pip']);
+      engineOk = run(venvPython, ['-m', 'pip', 'install', '--upgrade', 'piper-tts']);
+    }
+  }
 
   log('\n→ Downloading voices into ./voices …');
   let got = 0;
   if (engineOk) {
     // official downloader: resolves paths correctly and verifies files
-    if (run(py, ['-m', 'piper.download_voices', ...WANT, '--data-dir', VOICES])) {
+    if (run(venvPython, ['-m', 'piper.download_voices', ...WANT, '--data-dir', VOICES])) {
       got = WANT.filter((id) => fs.existsSync(path.join(VOICES, id + '.onnx'))).length;
     }
   }
@@ -72,10 +91,11 @@ async function manualDownload(id) {
   }
 
   log('\n──────────────────────────────────────────');
-  log(`Voices ready: ${got}/${WANT.length}   Engine: ${engineOk ? 'piper-tts (python -m piper)' : 'NOT installed'}`);
+  log(`Voices ready: ${got}/${WANT.length}   Engine: ${engineOk ? 'piper-tts (venv)' : 'NOT installed'}`);
   if (!engineOk) {
     log('\nFinish the engine install manually:');
-    log('  • pip install piper-tts');
+    log('  • sudo apt-get install -y python3-venv   (Debian/Pi — needed to create the venv)');
+    log('  • npm run setup-piper                     (re-run)');
     log('  • or set PIPER_CMD in .env to a piper binary path');
   }
   log('\nTune the voice in config.json -> tts.synthArgs, e.g.:');

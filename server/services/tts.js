@@ -23,6 +23,10 @@ export function piperCommand() {
   if (_cmd !== undefined) return _cmd;
   const env = process.env.PIPER_CMD;
   if (env && env.trim()) { _cmd = env.trim().split(/\s+/); return _cmd; }
+  // Engine installed into a local venv by setup-piper — the Bookworm/PEP-668-safe
+  // way, since system `pip install` is blocked on Pi OS Lite.
+  const venvPy = path.join(ROOT, '.venv-piper', process.platform === 'win32' ? 'Scripts' : 'bin', process.platform === 'win32' ? 'python.exe' : 'python');
+  if (fs.existsSync(venvPy)) { _cmd = [venvPy, '-m', 'piper']; return _cmd; }
   const bin = path.join(ROOT, 'vendor', 'piper', process.platform === 'win32' ? 'piper.exe' : 'piper');
   if (fs.existsSync(bin)) { _cmd = [bin]; return _cmd; }
   _cmd = [process.platform === 'win32' ? 'python' : 'python3', '-m', 'piper'];

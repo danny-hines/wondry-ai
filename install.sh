@@ -187,6 +187,9 @@ ok "Installed the 'wondry' command (try: wondry update)"
 
 # ---- 7. optional: Piper TTS ------------------------------------------------
 if confirm "Install Piper TTS now (natural offline voice; recommended)?" y; then
+  # python3-venv: setup-piper installs the engine into a venv (Bookworm blocks a
+  # system `pip install` via PEP 668). ffmpeg/libstdc++ come via other steps.
+  spin "Installing Piper prerequisites (python3-venv)" sudo apt-get install -y -qq python3-venv
   say "Setting up Piper…"; npm run setup-piper || warn "Piper setup hit an issue — you can re-run 'npm run setup-piper' later."
 fi
 
