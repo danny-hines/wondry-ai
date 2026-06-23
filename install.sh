@@ -53,6 +53,23 @@ confirm() {
 
 need_sudo() { command -v sudo >/dev/null 2>&1 || die "sudo is required"; }
 
+# spin "Message" cmd args…  — run a (possibly silent, slow) command while showing
+# a live elapsed-time indicator, so the terminal never looks frozen. Preserves the
+# command's exit status; falls back to a plain run when there's no tty.
+spin() {
+  local msg="$1"; shift
+  if ! have_tty; then say "$msg"; "$@"; return; fi
+  "$@" & local pid=$! s=0 rc=0
+  while kill -0 "$pid" 2>/dev/null; do
+    printf '\r%s▸ %s%s … %ds ' "$(c '1;36')" "$msg" "$(c 0)" "$s"
+    sleep 1; s=$((s+1))
+  done
+  wait "$pid" || rc=$?
+  if [ "$rc" -eq 0 ]; then printf '\r%s✓ %s%s (%ds)%*s\n' "$(c '1;32')" "$msg" "$(c 0)" "$s" 6 ''
+  else printf '\r%s✗ %s%s%*s\n' "$(c '1;31')" "$msg" "$(c 0)" 12 ''; fi
+  return $rc
+}
+
 # ---- 0. preflight ----------------------------------------------------------
 [ "$(id -u)" -ne 0 ] || die "Run as your normal user (e.g. 'pi'), not root — it uses sudo only where needed."
 need_sudo
@@ -72,11 +89,13 @@ trap 'kill "$SUDO_KEEPALIVE" 2>/dev/null || true' EXIT
 ok "Administrator access granted"
 
 # ---- 1. system packages ----------------------------------------------------
-say "Installing system packages… (downloading; can take a minute or two on a Pi)"
-sudo apt-get update -qq
-sudo apt-get install -y -qq git curl ca-certificates unclutter >/dev/null
+# These apt steps are silent and can run for minutes on a Pi — show live progress.
+spin "Updating package lists (apt)" sudo apt-get update -qq
+spin "Installing base packages" sudo apt-get install -y -qq git curl ca-certificates unclutter
 # chromium is 'chromium-browser' on Pi OS, 'chromium' elsewhere
-sudo apt-get install -y -qq chromium-browser >/dev/null 2>&1 || sudo apt-get install -y -qq chromium >/dev/null 2>&1 || warn "Could not install chromium automatically."
+spin "Installing Chromium" bash -c \
+  'sudo apt-get install -y -qq chromium-browser >/dev/null 2>&1 || sudo apt-get install -y -qq chromium >/dev/null 2>&1' \
+  || warn "Could not install chromium automatically."
 ok "Base packages ready"
 
 # ---- 2. Node 22.5+ ---------------------------------------------------------
@@ -88,8 +107,9 @@ node_ok() {
 }
 if node_ok; then ok "Node $(node -v) already present"; else
   say "Installing Node ${NODE_MAJOR}.x (the app needs Node 22.5+ for built-in SQLite)…"
-  curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | sudo -E bash - >/dev/null
-  sudo apt-get install -y -qq nodejs >/dev/null
+  spin "Adding NodeSource repository" bash -c \
+    "curl -fsSL 'https://deb.nodesource.com/setup_${NODE_MAJOR}.x' | sudo -E bash - >/dev/null"
+  spin "Installing Node.js" sudo apt-get install -y -qq nodejs
   node_ok || die "Node is still older than 22.5 after install ($(node -v 2>/dev/null)). Install it manually and re-run."
   ok "Node $(node -v) installed"
 fi
