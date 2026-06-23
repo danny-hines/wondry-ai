@@ -230,7 +230,10 @@ boots. What the installer wires up (and how to do it by hand):
 - **Speech-in (STT):** [whisper.cpp](https://github.com/ggerganov/whisper.cpp); the server reads
   `WHISPER_HTTP_URL` (a running whisper server) or `WHISPER_CMD` + `WHISPER_MODEL` (the CLI) from `.env`.
   Point the kiosk at the on-device path by opening it as `…/?stt=server` (the installer does this when you
-  add whisper). No whisper → browser Web Speech.
+  add whisper). No whisper → browser Web Speech. The server transcodes the browser's audio to WAV with
+  **ffmpeg** (installed alongside whisper) before whisper reads it. Any USB mic works as the capture
+  device — including the built-in mic on a **USB camera+mic combo** (it's just the default ALSA/PipeWire
+  source); no per-device config needed.
 - **Presence (greet on approach):** run your Hailo person-detection sidecar and have it POST
   `{"state":"present"}` / `{"state":"absent"}` to `http://localhost:8080/api/presence` — the idle avatar
   greets (throttled). No camera code runs in this app. Test it on any machine with
