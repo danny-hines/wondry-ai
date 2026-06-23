@@ -15,6 +15,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..', '..');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Reserved voice id: synthesize on-device in the browser (Chromium SpeechSynthesis →
+// speech-dispatcher/espeak on the Pi) instead of via Piper. Robotic but instant — fits
+// the dot-matrix look. The server never produces audio for it; /api/tts signals the
+// client (204) to use its speakFallback path. Kept in sync with the client option.
+export const BROWSER_VOICE = 'browser';
+
 const ttsCfg = () => getConfig().tts || {};
 export function voicesDir() { return process.env.PIPER_VOICES_DIR || path.join(ROOT, ttsCfg().voicesDir || 'voices'); }
 

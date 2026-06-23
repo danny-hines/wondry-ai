@@ -240,11 +240,15 @@ fi
 # unclutter hides it after any movement. Targets Pi OS Lite (64-bit).
 say "Setting up the full-screen kiosk on boot…"
 # X11 kiosk stack + the audio server Chromium needs for the mic (getUserMedia)
-# and TTS playback. Pi OS Lite ships none of these.
-spin "Installing kiosk stack (Xorg, Openbox, audio)" \
+# and TTS playback. Pi OS Lite ships none of these. speech-dispatcher + espeak-ng
+# back Chromium's SpeechSynthesis (the "Robot" on-device voice option): unlike
+# macOS/Windows, Linux Chromium has no built-in synthesizer and returns no voices
+# without these — so the per-kid Robot voice would otherwise be silent on the Pi.
+spin "Installing kiosk stack (Xorg, Openbox, audio, speech)" \
   sudo apt-get install -y --no-install-recommends \
     xserver-xorg xinit x11-xserver-utils openbox unclutter \
-    pipewire pipewire-pulse wireplumber pulseaudio-utils
+    pipewire pipewire-pulse wireplumber pulseaudio-utils \
+    speech-dispatcher espeak-ng
 sudo usermod -aG video,render,input,audio,tty "$USER" 2>/dev/null || true
 # PipeWire runs as the logged-in user; ensure its services come up in the session.
 systemctl --user enable pipewire pipewire-pulse wireplumber >/dev/null 2>&1 || true

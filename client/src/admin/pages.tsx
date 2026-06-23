@@ -204,14 +204,24 @@ export function Kids() {
   const api = useAdmin();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [voices, setVoices] = useState<string[]>([]);
+  const [browserVoice, setBrowserVoice] = useState<string | null>(null);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [savedId, setSavedId] = useState<string | null>(null);
   const [types, setTypes] = useState<ContentTypeManifest[]>([]);
   const [np, setNp] = useState({ name: '', age: '', reading_level: '', color: '#8b5cf6' });
   const load = () => api.profiles().then((d) => setProfiles(d.profiles)).catch(() => {});
-  useEffect(() => { load(); getVoices().then((v) => setVoices(v.voices)); api.contentTypes().then((d) => setTypes(d.types)).catch(() => {}); }, [api]);
+  useEffect(() => { load(); getVoices().then((v) => { setVoices(v.voices); setBrowserVoice(v.browserVoice ?? null); }); api.contentTypes().then((d) => setTypes(d.types)).catch(() => {}); }, [api]);
   const setField = (id: string, f: keyof Profile, v: any) => setProfiles((ps) => ps.map((p) => p.id === id ? { ...p, [f]: v } : p));
   const disabledSet = (p: Profile) => new Set((p.disabled_types || '').split(',').map((s) => s.trim()).filter(Boolean));
   const toggleType = (p: Profile, id: string) => { const s = disabledSet(p); s.has(id) ? s.delete(id) : s.add(id); setField(p.id, 'disabled_types', [...s].join(',')); };
-  const save = async (p: Profile) => { await api.saveProfile({ id: p.id, name: p.name, initials: p.initials, color: p.color, age: p.age, reading_level: p.reading_level, voice: p.voice, persona: p.persona, theme: p.theme === 'dark' ? 'dark' : 'light', interests: p.interests, disabledTypes: [...disabledSet(p)] }); };
+  const save = async (p: Profile) => {
+    setSavingId(p.id); setSavedId(null);
+    try {
+      await api.saveProfile({ id: p.id, name: p.name, initials: p.initials, color: p.color, age: p.age, reading_level: p.reading_level, voice: p.voice, persona: p.persona, theme: p.theme === 'dark' ? 'dark' : 'light', interests: p.interests, disabledTypes: [...disabledSet(p)] });
+      setSavedId(p.id);
+      setTimeout(() => setSavedId((s) => (s === p.id ? null : s)), 2500);
+    } finally { setSavingId((s) => (s === p.id ? null : s)); }
+  };
   const remove = async (p: Profile) => { if (!confirm(`Remove ${p.name}? This deletes their conversation history and activity. Pages they created are kept (unassigned). This can't be undone.`)) return; await api.deleteProfile(p.id); load(); };
   const add = async () => { if (!np.name) return; await api.saveProfile({ name: np.name, age: Number(np.age) || null, reading_level: np.reading_level, color: np.color }); setNp({ name: '', age: '', reading_level: '', color: '#8b5cf6' }); load(); };
   return (
@@ -228,9 +238,10 @@ export function Kids() {
                 {READING_LEVELS.map((rl) => <option key={rl} value={rl}>{rl}</option>)}
                 {p.reading_level && !READING_LEVELS.includes(p.reading_level) && <option value={p.reading_level}>{p.reading_level}</option>}
               </select></div>
-            <div><label>Voice (Piper)</label>
+            <div><label>Voice</label>
               <select value={p.voice ?? ''} onChange={(e) => setField(p.id, 'voice', e.target.value)} style={{ width: '100%' }}>
                 <option value="">{voices.length ? '(default voice)' : 'run: npm run setup-piper'}</option>
+                {browserVoice && <option value={browserVoice}>🤖 Robot (on-device, fastest)</option>}
                 {voices.map((v) => <option key={v} value={v}>{v}</option>)}
               </select></div>
             <div><label>Assistant personality (future)</label><input value={p.persona ?? ''} onChange={(e) => setField(p.id, 'persona', e.target.value)} placeholder="e.g. playful and patient" style={{ width: '100%' }} /></div>
@@ -260,9 +271,10 @@ export function Kids() {
             </div>
           )}
           <KidPreview name={p.name} color={p.color} theme={p.theme === 'dark' ? 'dark' : 'light'} voice={p.voice} />
-          <div className="row" style={{ marginTop: 12 }}>
-            <button className="act" onClick={() => save(p)}>Save</button>
+          <div className="row" style={{ marginTop: 12, alignItems: 'center' }}>
+            <button className="act" disabled={savingId === p.id} onClick={() => save(p)}>{savingId === p.id ? 'Saving…' : 'Save'}</button>
             <button className="act warn" onClick={() => remove(p)}>Remove child</button>
+            {savedId === p.id && <span className="muted">Saved ✓</span>}
           </div>
         </div>
       ))}

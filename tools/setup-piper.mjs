@@ -22,6 +22,7 @@ const venvPython = path.join(VENV, process.platform === 'win32' ? 'Scripts' : 'b
 // voices for variety. Browse more at https://rhasspy.github.io/piper-samples/
 const WANT = [
   'en_US-lessac-high',       // clear, natural (default)
+  'en_US-lessac-low',        // same speaker, low-quality model = snappier synth (the "fast" voice)
   'en_US-ryan-high',         // warm male
   'en_GB-jenny_dioco-medium',// friendly British female
   'en_US-amy-medium',        // light, gentle

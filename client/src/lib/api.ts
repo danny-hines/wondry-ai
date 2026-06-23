@@ -12,11 +12,13 @@ export const markEngagement = (id: string, kind: 'seen' | 'opened' | 'finished',
 export const ttsArrayBuffer = async (text: string, profileId?: string, voice?: string): Promise<ArrayBuffer | null> => {
   try {
     const r = await fetch('/api/tts', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, profileId, voice }) });
-    if (!r.ok) return null;
+    // 204 = on-device "browser" voice: no audio body; returning null routes the caller
+    // through useSpeech's speakFallback (window.speechSynthesis), same as a Piper miss.
+    if (r.status === 204 || !r.ok) return null;
     return await r.arrayBuffer();
   } catch { return null; }
 };
-export const getVoices = () => fetch('/api/voices').then(j<{ voices: string[]; available: boolean }>).catch(() => ({ voices: [], available: false }));
+export const getVoices = () => fetch('/api/voices').then(j<{ voices: string[]; available: boolean; browserVoice?: string }>).catch(() => ({ voices: [] as string[], available: false, browserVoice: undefined }));
 
 // ----- structured content (kiosk: reading, flashcards, games, …) -----
 export const getContent = <T = unknown>(id: string) => fetch(`/api/content/${id}`).then(j<T>);

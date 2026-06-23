@@ -79,6 +79,14 @@ through Web Audio, and drives the avatar's mouth from a real `AnalyserNode` (amp
 If Piper is unavailable it silently uses browser speech + the synthetic-envelope mouth — nothing
 breaks. Same path on the Pi.
 
+**🤖 Robot (on-device) voice:** the dropdown also offers a reserved `browser` voice that skips
+Piper entirely — `/api/tts` returns `204` and the kiosk speaks the line with Chromium's built-in
+`SpeechSynthesis`. It's instant (no model inference) and its robotic tone suits the dot-matrix
+avatar, so it's a good low-latency option. Caveat: **Linux Chromium has no built-in synthesizer**,
+so on the Pi this needs `speech-dispatcher` + `espeak-ng` (installed by `install.sh`) — without
+them `SpeechSynthesis` returns no voices and the line is silent. For a faster *Piper* voice instead,
+`setup-piper` now also pulls `en_US-lessac-low` (same speaker as the default, smaller/snappier model).
+
 **Making it sound less robotic:** Piper's `-high` voices are far more natural than `-medium`
 (`setup-piper` pulls high-tier voices by default). Pacing/prosody are tuned via `config.json` →
 `tts.synthArgs`; the default adds `--sentence-silence 0.4`. To slow it down and calm it, try
