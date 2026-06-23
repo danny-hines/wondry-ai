@@ -24,13 +24,24 @@
   font-family: ui-rounded, "Segoe UI", system-ui, sans-serif; color: var(--fg); }
 
 /* Touchscreen kiosk: no mouse, so hide the pointer (unclutter is X11-only and
-   does nothing under the Wayland/cage kiosk). Scoped to .kiosk-root so the
-   parent console keeps its cursor. */
-.kiosk-root, .kiosk-root * { cursor: none; }
+   does nothing under the Wayland/cage kiosk). Only applied on the built/kiosk
+   app (the .hide-cursor class is added in Kiosk.tsx for production), so local
+   development keeps its cursor. Scoped to .kiosk-root so the console is unaffected. */
+.kiosk-root.hide-cursor, .kiosk-root.hide-cursor * { cursor: none; }
 
 #left { display: flex; align-items: center; justify-content: center; flex: 1; min-width: 0; gap: 18px; padding: 24px;
   transition: flex-basis .5s cubic-bezier(.4,0,.2,1), flex-grow .5s cubic-bezier(.4,0,.2,1), padding .4s ease; will-change: flex-basis, flex-grow; }
-#avatarWrap { display: flex; align-items: center; justify-content: center; transition: transform .5s cubic-bezier(.4,0,.2,1); will-change: transform; transform: scale(1); }
+#avatarWrap { position: relative; display: flex; align-items: center; justify-content: center; transition: transform .5s cubic-bezier(.4,0,.2,1); will-change: transform; transform: scale(1); cursor: pointer; }
+
+/* Voice-only kiosk: "Tap to talk" affordance under the avatar's face, and a soft
+   accent ring while listening. (.taptotalk is only rendered in voice-only mode.) */
+.taptotalk { position: absolute; bottom: -34px; left: 50%; transform: translateX(-50%); white-space: nowrap;
+  font-size: 1rem; font-weight: 700; letter-spacing: .3px; color: var(--muted); pointer-events: none;
+  animation: taphint 2.4s ease-in-out infinite; }
+@keyframes taphint { 0%, 100% { opacity: .55; } 50% { opacity: .95; } }
+#avatarWrap.listening { box-shadow: 0 0 0 4px color-mix(in srgb, var(--user, #16b8a6) 45%, transparent); border-radius: 50%; }
+#avatarWrap.listening .taptotalk { color: var(--user, #16b8a6); opacity: 1; animation: none; }
+.state-split .taptotalk { display: none; }
 #avatarWrap canvas { width: 300px; height: 300px; }
 #convo { display: flex; flex-direction: column; min-width: 0; min-height: 0; width: 0; opacity: 0; overflow: hidden; transition: width .5s cubic-bezier(.4,0,.2,1), opacity .4s ease; }
 #bubbles { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 8px 6px; }

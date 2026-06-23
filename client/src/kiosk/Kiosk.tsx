@@ -174,16 +174,43 @@ export default function Kiosk() {
   const recRef = useRef<any>(null);
   const [micLive, setMicLive] = useState(false);
 
+  // Hide the mouse pointer only on the real kiosk (production build), so local
+  // development keeps a usable cursor. Override per-load with ?cursor=off (force
+  // hide, e.g. testing a prod build) or ?cursor=on (force show).
+  const hideCursor = (() => {
+    const f = new URLSearchParams(location.search).get('cursor');
+    if (f === 'on') return false;
+    if (f === 'off') return true;
+    return import.meta.env.PROD;
+  })();
+
+  // Voice-only on the real kiosk (production build): hide the keyboard input bar
+  // and drive input by tapping the avatar's face. Dev keeps the text box for quick
+  // testing. Override per-load with ?kiosk=1 (force voice-only) / ?kiosk=0 (keyboard).
+  const voiceOnly = (() => {
+    const f = new URLSearchParams(location.search).get('kiosk');
+    if (f === '1') return true;
+    if (f === '0') return false;
+    return import.meta.env.PROD;
+  })();
+  // Tap-to-talk: toggle a listen session (used by the avatar tap in voice-only mode).
+  const toggleListen = () => {
+    if (viewRef.current === 'idle') setView('conversation');
+    const r = recRef.current; if (!r) return;
+    micLive ? r.stop() : r.start();
+  };
+
   // Touchscreen kiosk: hide the mouse pointer across the whole viewport. The cage
   // compositor parks a cursor at center on boot; a CSS rule on .kiosk-root misses
   // the inset margin around it, so set it on <html> while the kiosk is mounted
   // (restored on unmount, so the parent console keeps its cursor).
   useEffect(() => {
+    if (!hideCursor) return;
     const html = document.documentElement;
     const prev = html.style.cursor;
     html.style.cursor = 'none';
     return () => { html.style.cursor = prev; };
-  }, []);
+  }, [hideCursor]);
   useEffect(() => {
     // Use the shared STT engine (Web Speech in dev; whisper via /api/stt on the Pi,
     // whose kiosk Chromium has no working Web Speech). A raw SpeechRecognition here
@@ -213,10 +240,15 @@ export default function Kiosk() {
   const openGenerating = !!(openCard && openCard.kind === 'card' && openCard.artifact.status === 'generating');
 
   return (
-    <div className={`kiosk-root state-${view}${full ? ' full' : ''}${user?.theme === 'dark' ? ' theme-dark' : ''}`} style={{ ['--user' as any]: user?.color || '#16b8a6', ['--user-fg' as any]: readableOn(user?.color || '#16b8a6') }} onPointerDown={bumpIdle}>
+    <div className={`kiosk-root state-${view}${full ? ' full' : ''}${user?.theme === 'dark' ? ' theme-dark' : ''}${hideCursor ? ' hide-cursor' : ''}`} style={{ ['--user' as any]: user?.color || '#16b8a6', ['--user-fg' as any]: readableOn(user?.color || '#16b8a6') }} onPointerDown={bumpIdle}>
       <div id="left">
-        <div id="avatarWrap" onClick={() => { if (view === 'idle') { setView('conversation'); avatarRef.current?.setMood('listening'); setTimeout(() => avatarRef.current?.setMood('idle'), 1200); } }}>
+        <div id="avatarWrap" className={voiceOnly && micLive ? 'listening' : ''}
+          onClick={() => {
+            if (voiceOnly) { toggleListen(); return; }
+            if (view === 'idle') { setView('conversation'); avatarRef.current?.setMood('listening'); setTimeout(() => avatarRef.current?.setMood('idle'), 1200); }
+          }}>
           <Avatar ref={avatarRef} />
+          {voiceOnly && <div className="taptotalk">{micLive ? 'Listening… tap to stop' : 'Tap to talk'}</div>}
         </div>
         <div id="convo">
           <div id="bubbles" ref={bubblesRef}>
@@ -226,13 +258,15 @@ export default function Kiosk() {
                   : <div key={it.key} className="bubble kid">{it.text}</div>)
               : <ArtifactCard key={it.key} artifact={it.artifact} onOpen={() => openArtifact(it.artifact)} onRetry={() => sendTurn('make a page about ' + (it.artifact.subject || it.artifact.title))} />)}
           </div>
-          <div id="inputbar">
-            <input id="prompt" value={prompt} placeholder="Ask me anything…  (type or tap 🎤)"
-              onChange={(e) => setPrompt(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') sendTurn(prompt); }} />
-            <button id="mic" className={micLive ? 'live' : ''} title="Speak"
-              onClick={() => { const r = recRef.current; if (!r) return; micLive ? r.stop() : r.start(); }}>🎤</button>
-            <button id="send" onClick={() => sendTurn(prompt)}>Send</button>
-          </div>
+          {!voiceOnly && (
+            <div id="inputbar">
+              <input id="prompt" value={prompt} placeholder="Ask me anything…  (type or tap 🎤)"
+                onChange={(e) => setPrompt(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') sendTurn(prompt); }} />
+              <button id="mic" className={micLive ? 'live' : ''} title="Speak"
+                onClick={() => { const r = recRef.current; if (!r) return; micLive ? r.stop() : r.start(); }}>🎤</button>
+              <button id="send" onClick={() => sendTurn(prompt)}>Send</button>
+            </div>
+          )}
         </div>
       </div>
 
