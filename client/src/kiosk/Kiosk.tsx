@@ -3,6 +3,7 @@ import { Avatar } from './Avatar';
 import type { AvatarEngine } from './avatarEngine';
 import { useSpeech } from './useSpeech';
 import { getStt, type SttSession } from './sttService';
+import { startThinkingSound, stopThinkingSound } from './thinkingSound';
 import { rendererFor } from '../content/registry';
 import { getProfiles, getTray, postTurn, markEngagement } from '../lib/api';
 import { mdToHtml } from '../lib/markdown';
@@ -11,17 +12,6 @@ import type { Profile, Artifact, WSMessage } from '../lib/types';
 import './kiosk.css';
 
 const IDLE_MS = 2 * 60 * 1000;
-
-const rnd = (a: string[]) => a[Math.floor(Math.random() * a.length)];
-// Instant acknowledgement spoken while the real reply is generated — matched to the
-// message type so a statement or a "yes" isn't answered with "good question!".
-function pickFiller(text: string): string {
-  const p = text.trim().toLowerCase();
-  if (/^(yes|yeah|yep|yup|ya|sure|ok|okay|okey|please|no|nope|nah)\b/.test(p)) return rnd(['Okay!', 'Got it!', 'Sure thing!']);
-  if (/^(hi|hello|hey|yo|sup|howdy)\b/.test(p)) return rnd(['Hi there!', 'Hello!', 'Hey!']);
-  if (/\?\s*$/.test(text) || /^(what|why|how|who|where|when|which|can|could|do|does|did|is|are|will|would)\b/.test(p)) return rnd(['Hmm, let me think!', 'Ooh, good question!', 'Let me see…']);
-  return rnd(['Ooh!', 'Cool!', 'Mhm!', 'Neat!', 'Tell me more!', 'I see!']);
-}
 
 type Item =
   | { key: string; kind: 'bubble'; role: 'kid' | 'avatar'; text: string }
@@ -133,16 +123,18 @@ export default function Kiosk() {
     setItems((p) => [...p, { key: 'k' + Date.now(), kind: 'bubble', role: 'kid', text }]);
     setPrompt('');
     avatarRef.current?.setMood('thinking');
-    speak(pickFiller(text), user.id);
+    startThinkingSound();   // quiet beeps/boops instead of a spoken filler
     bumpIdle();
     try {
       const res = await postTurn(user.id, text);
+      stopThinkingSound();
       const replyKey = 'a' + Date.now();
       setItems((p) => [...p, { key: replyKey, kind: 'bubble', role: 'avatar', text: res.reply }]);
       avatarRef.current?.setMood('idle');
       if (res.kind === 'artifact' && res.artifact) { const art = res.artifact; setItems((p) => [...p, { key: art.id, kind: 'card', artifact: art }]); }
       speak(res.reply, user.id, replyKey);
     } catch {
+      stopThinkingSound();
       setItems((p) => [...p, { key: 'e' + Date.now(), kind: 'bubble', role: 'avatar', text: 'Oops, something went wrong. Try again?' }]);
       avatarRef.current?.setMood('idle');
     }
