@@ -233,9 +233,16 @@ case "$compositor" in
   *)
     # --- Pi OS Lite: no desktop. Build a minimal cage kiosk on tty1. ---
     say "No desktop found — setting up a minimal kiosk (cage) for Pi OS Lite…"
-    spin "Installing kiosk compositor (cage)" sudo apt-get install -y -qq cage
+    # cage = single-app Wayland kiosk; pipewire/wireplumber = the audio server
+    # Chromium needs to reach the mic (getUserMedia) and play TTS. Pi OS Lite
+    # ships neither, so the USB mic is invisible to the browser without these.
+    spin "Installing kiosk + audio (cage, pipewire)" \
+      sudo apt-get install -y -qq cage pipewire pipewire-pulse wireplumber
     # cage needs DRM/input access; the default Pi user usually has these already.
-    sudo usermod -aG video,render,input "$USER" 2>/dev/null || true
+    sudo usermod -aG video,render,input,audio "$USER" 2>/dev/null || true
+    # PipeWire runs as the logged-in user; make sure its services come up in the
+    # tty1 session (the packages enable these by default, but be explicit).
+    systemctl --user enable pipewire pipewire-pulse wireplumber >/dev/null 2>&1 || true
 
     # Auto-login the console so a session exists to launch the kiosk from
     # (identical to raspi-config's "Console Autologin").
