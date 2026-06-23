@@ -63,7 +63,7 @@ export default function Kiosk() {
     if (idleTimer.current) clearTimeout(idleTimer.current);
     idleTimer.current = setTimeout(() => { if (viewRef.current !== 'split') goIdle(); }, IDLE_MS);
   }, []);
-  const goIdle = () => { setView('idle'); setSplitMode(null); setOpenId(null); setFull(false); avatarRef.current?.setMood('idle'); };
+  const goIdle = () => { setView('idle'); setSplitMode(null); setOpenId(null); setFull(false); setHintSeen(false); avatarRef.current?.setMood('idle'); };
 
   useEffect(() => {
     getProfiles().then((ps) => setProfiles(ps));
@@ -128,6 +128,7 @@ export default function Kiosk() {
 
   const sendTurn = async (text: string) => {
     text = text.trim(); if (!text || !user) return;
+    setHintSeen(true);  // child has talked — drop the first-run "tap to talk" hint
     if (viewRef.current === 'idle') setView('conversation');
     setItems((p) => [...p, { key: 'k' + Date.now(), kind: 'bubble', role: 'kid', text }]);
     setPrompt('');
@@ -173,6 +174,10 @@ export default function Kiosk() {
 
   const recRef = useRef<any>(null);
   const [micLive, setMicLive] = useState(false);
+  // The "tap to talk" hint is first-run guidance: show it until the child has
+  // talked this session, then hide it (the equalizer signals listening). It comes
+  // back after the kiosk resets to idle (goIdle), i.e. a fresh session.
+  const [hintSeen, setHintSeen] = useState(false);
 
   // Hide the mouse pointer only on the real kiosk (production build), so local
   // development keeps a usable cursor. Override per-load with ?cursor=off (force
@@ -276,7 +281,7 @@ export default function Kiosk() {
             if (view === 'idle') setView('conversation');
           }}>
           <Avatar ref={avatarRef} />
-          {voiceOnly && <div className="taptotalk">{micLive ? 'Listening… tap to stop' : 'Tap to talk'}</div>}
+          {voiceOnly && !hintSeen && <div className="taptotalk">{micLive ? 'Listening… tap to stop' : 'Tap to talk'}</div>}
         </div>
         <div id="convo">
           <div id="bubbles" ref={bubblesRef}>
