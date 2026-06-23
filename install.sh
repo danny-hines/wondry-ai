@@ -279,9 +279,8 @@ cat > "$HOME/.config/openbox/autostart" <<AUTO
 # never blank/sleep the kiosk screen
 xset s off -dpms s noblank &
 
-# tame USB-mic capture gain so a close/loud speaker doesn't clip (best-effort:
-# PipeWire may still be coming up, so don't fail the kiosk if it isn't ready)
-( for i in 1 2 3 4 5; do wpctl set-volume @DEFAULT_AUDIO_SOURCE@ 0.85 2>/dev/null && break; sleep 1; done ) &
+# pin the chosen mic/speaker as PipeWire defaults + sane levels (see: wondry audio)
+( bash '${INSTALL_DIR}/tools/devices.sh' apply ) &
 
 # run the Chromium kiosk forever — relaunch if it ever crashes
 (
@@ -292,6 +291,14 @@ xset s off -dpms s noblank &
 ) &
 AUTO
 ok "Kiosk set up (X11/Openbox on tty1) — starts on next boot."
+
+# Offer to pick the mic/speaker/camera now. Needs a live PipeWire session, which
+# a headless `curl | bash` install may not have — if so, just point at the
+# `wondry audio` command to run after boot. The choice is saved by device name
+# and re-pinned on every boot (handles phantom/extra inputs stealing the default).
+if confirm "Pick the microphone/speaker now? (else run 'wondry audio' on the Pi later)" y; then
+  bash "$INSTALL_DIR/tools/devices.sh" select || warn "Couldn't select devices now — run 'wondry audio' on the Pi after it boots."
+fi
 
 # ---- done ------------------------------------------------------------------
 IP="$(hostname -I 2>/dev/null | awk '{print $1}')"

@@ -35,6 +35,7 @@ case "${1:-help}" in
   stop)    sudo systemctl stop "$SERVICE";    echo "Stopped.";;
   status)  systemctl status "$SERVICE" --no-pager || true;;
   logs)    journalctl -u "$SERVICE" -f;;
+  audio)   bash "$DIR/tools/devices.sh" select;;
   version) git -C "$DIR" log -1 --format='%h %s (%cr)';;
   url)
     ip="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
@@ -50,6 +51,7 @@ case "${1:-help}" in
     echo "  start | stop"
     echo "  status    service status"
     echo "  logs      follow the server logs"
+    echo "  audio     pick the microphone / speaker / camera (PipeWire defaults)"
     echo "  version   the installed git revision"
     echo "  url       the kiosk + parent-console URLs"
     ;;

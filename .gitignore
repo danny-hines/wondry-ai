@@ -16,6 +16,9 @@ voices/
 vendor/
 .venv-piper/
 
+# Saved audio/camera device prefs (written by: wondry audio)
+.kiosk-devices
+
 # React client (Vite)
 client/node_modules/
 client/dist/
