@@ -234,6 +234,26 @@ sudo usermod -aG video,render,input,audio,tty "$USER" 2>/dev/null || true
 # PipeWire runs as the logged-in user; ensure its services come up in the session.
 systemctl --user enable pipewire pipewire-pulse wireplumber >/dev/null 2>&1 || true
 
+# Fonts: Pi OS Lite ships almost none, so emoji icons (🎤, ✨) render as tofu boxes
+# and the UI + generated pages fall back to one default font. Install a color-emoji
+# font, a rounded UI font, a Comic-Sans-alike, and broad symbol coverage…
+spin "Installing fonts (emoji, rounded UI, symbols)" \
+  sudo apt-get install -y --no-install-recommends \
+    fonts-noto-color-emoji fonts-noto-core fonts-nunito fonts-comic-neue
+# …then alias the Apple/Windows family names the app + already-generated artifacts
+# request to the installed fonts, so they render instead of falling back. This is
+# retroactive — no app/code change or artifact regeneration needed.
+sudo tee /etc/fonts/local.conf >/dev/null <<'FONTS'
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<fontconfig>
+  <alias binding="strong"><family>ui-rounded</family><prefer><family>Nunito</family></prefer></alias>
+  <alias binding="strong"><family>Segoe UI</family><prefer><family>Nunito</family></prefer></alias>
+  <alias binding="strong"><family>Comic Sans MS</family><prefer><family>Comic Neue</family></prefer></alias>
+</fontconfig>
+FONTS
+fc-cache -f >/dev/null 2>&1 || true
+
 # Force Xorg to use the vc4 KMS display via the `modesetting` driver as primary.
 # A Pi exposes two DRM nodes (v3d render + vc4 display); without this, Xorg also
 # autoconfigures the legacy `fbdev` driver, which fails fatally with
