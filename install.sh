@@ -211,8 +211,11 @@ ENV
   ok "whisper.cpp wired up (kiosk will use on-device STT)"
 fi
 
-# ---- 9. kiosk autostart (Wayland: labwc on Pi 5, wayfire on Pi 4) ----------
-say "Setting up the full-screen kiosk on login…"
+# ---- 9. kiosk autostart -----------------------------------------------------
+# Pi OS Desktop already runs a Wayland compositor (labwc on Pi 5, wayfire on Pi 4)
+# — hook its autostart. Pi OS Lite has no desktop, so install `cage` (a one-app
+# Wayland kiosk compositor) and boot straight into it on the console (tty1).
+say "Setting up the full-screen kiosk on boot…"
 KIOSK_CMD="env WONDRY_URL='${KIOSK_URL}' bash '${INSTALL_DIR}/tools/kiosk.sh'"
 compositor=""
 if pgrep -x labwc >/dev/null 2>&1 || command -v labwc >/dev/null 2>&1; then compositor=labwc
@@ -228,7 +231,37 @@ case "$compositor" in
     grep -qF "$INSTALL_DIR/tools/kiosk.sh" "$INI" || sed -i "/^\[autostart\]/a wondry = ${KIOSK_CMD}" "$INI"
     ok "Kiosk autostart added (wayfire)";;
   *)
-    warn "Couldn't detect labwc/wayfire. Start the kiosk manually with:  $KIOSK_CMD";;
+    # --- Pi OS Lite: no desktop. Build a minimal cage kiosk on tty1. ---
+    say "No desktop found — setting up a minimal kiosk (cage) for Pi OS Lite…"
+    spin "Installing kiosk compositor (cage)" sudo apt-get install -y -qq cage
+    # cage needs DRM/input access; the default Pi user usually has these already.
+    sudo usermod -aG video,render,input "$USER" 2>/dev/null || true
+
+    # Auto-login the console so a session exists to launch the kiosk from
+    # (identical to raspi-config's "Console Autologin").
+    sudo mkdir -p /etc/systemd/system/getty@tty1.service.d
+    sudo tee /etc/systemd/system/getty@tty1.service.d/autologin.conf >/dev/null <<UNIT
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin ${USER} --noclear %I \$TERM
+UNIT
+    sudo systemctl daemon-reload
+
+    # Launch cage from the tty1 login shell — only on the physical console, and
+    # only when no graphical session is already running. cage exiting (browser
+    # closed/crashed) ends the login, getty respawns, and it relaunches.
+    PROFILE="$HOME/.bash_profile"
+    [ -f "$PROFILE" ] || printf '[ -f ~/.profile ] && . ~/.profile\n' > "$PROFILE"
+    if ! grep -qF 'WONDRY KIOSK' "$PROFILE"; then
+      cat >> "$PROFILE" <<KIOSK
+# --- WONDRY KIOSK (added by install.sh) ---
+if [ "\$(tty)" = "/dev/tty1" ] && [ -z "\${WAYLAND_DISPLAY:-}" ] && [ -z "\${DISPLAY:-}" ]; then
+  exec env WONDRY_URL='${KIOSK_URL}' cage -- bash '${INSTALL_DIR}/tools/kiosk.sh'
+fi
+# --- end WONDRY KIOSK ---
+KIOSK
+    fi
+    ok "Kiosk set up (cage on tty1) — starts on next boot.";;
 esac
 
 # ---- done ------------------------------------------------------------------
