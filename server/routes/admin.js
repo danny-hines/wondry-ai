@@ -6,6 +6,7 @@ import { ADMIN_PASSWORD, getConfig, getRichness, liveGenerationEnabled } from '.
 import { selectedTierId, dailyCap } from '../services/richness.js';
 import { startGeneration, startReadingGeneration, createArtifact, getArtifact, artifactPath } from '../services/generator.js';
 import { getType, manifests, setTypeEnabled } from '../content/registry.js';
+import { getWakeConfig, setWakeConfig } from '../services/wake.js';
 import '../content/index.js'; // ensure content types are registered
 import {
   getArtifactSystemPrompt, DEFAULT_ARTIFACT_SYSTEM_PROMPT,
@@ -177,6 +178,7 @@ router.get('/config', (req, res) => {
     routing: cfg.routing,
     providers: Object.keys(cfg.providers),
     liveGeneration: liveGenerationEnabled(),
+    wake: getWakeConfig(),
     richness: {
       selected: selectedTierId(),
       default: r.default || 'standard',
@@ -189,12 +191,13 @@ router.get('/config', (req, res) => {
 });
 
 router.post('/config', (req, res) => {
-  const { systemPrompt, chatSystemPrompt, readingSystemPrompt, richness, dailyCap: cap } = req.body || {};
+  const { systemPrompt, chatSystemPrompt, readingSystemPrompt, richness, dailyCap: cap, wake } = req.body || {};
   if (typeof systemPrompt === 'string') setKV('artifact_system_prompt', systemPrompt);
   if (typeof chatSystemPrompt === 'string') setKV('chat_system_prompt', chatSystemPrompt);
   if (typeof readingSystemPrompt === 'string') setKV('reading_system_prompt', readingSystemPrompt);
   if (typeof richness === 'string' && (getRichness().tiers || {})[richness]) setKV('content_richness', richness);
   if (cap !== undefined && cap !== null && cap !== '') setKV('richness_daily_cap', String(Math.max(0, parseInt(cap, 10) || 0)));
+  if (wake && typeof wake === 'object') setWakeConfig(wake);
   res.json({ ok: true });
 });
 

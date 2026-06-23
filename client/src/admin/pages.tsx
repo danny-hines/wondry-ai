@@ -329,9 +329,11 @@ export function Settings() {
   const [cp, setCp] = useState(''); const [sp, setSp] = useState(''); const [rp, setRp] = useState('');
   const [cpMsg, setCpMsg] = useState(''); const [spMsg, setSpMsg] = useState(''); const [rpMsg, setRpMsg] = useState('');
   const [rich, setRich] = useState(''); const [cap, setCap] = useState('0'); const [richMsg, setRichMsg] = useState('');
+  const [wake, setWake] = useState<{ enabled: boolean; phrase: string }>({ enabled: false, phrase: '' });
+  const [wakeMsg, setWakeMsg] = useState('');
   const [types, setTypes] = useState<ContentTypeManifest[]>([]);
   const [usage, setUsage] = useState<UsageReport | null>(null);
-  useEffect(() => { api.config().then((cfg) => { setC(cfg); setCp(cfg.chatSystemPrompt); setSp(cfg.systemPrompt); setRp(cfg.readingSystemPrompt); setRich(cfg.richness.selected); setCap(String(cfg.richness.dailyCap || 0)); }).catch(() => {}); }, [api]);
+  useEffect(() => { api.config().then((cfg) => { setC(cfg); setCp(cfg.chatSystemPrompt); setSp(cfg.systemPrompt); setRp(cfg.readingSystemPrompt); setRich(cfg.richness.selected); setCap(String(cfg.richness.dailyCap || 0)); setWake({ enabled: cfg.wake.enabled, phrase: cfg.wake.phrase }); }).catch(() => {}); }, [api]);
   useEffect(() => { api.contentTypes().then((d) => setTypes(d.types)).catch(() => {}); api.usage().then(setUsage).catch(() => {}); }, [api]);
   const toggleType = async (t: ContentTypeManifest) => { await api.setContentTypeEnabled(t.id, !t.enabled); setTypes((ts) => ts.map((x) => x.id === t.id ? { ...x, enabled: !x.enabled } : x)); };
   if (!c) return <p className="muted">Loading…</p>;
@@ -392,6 +394,21 @@ export function Settings() {
             <button className={`chip ${t.enabled ? 'on' : ''}`} onClick={() => toggleType(t)}>{t.enabled ? 'On' : 'Off'}</button>
           </div>
         ))}
+      </div>
+      <div className="card">
+        <h3 style={{ marginBottom: 6 }}>Wake word (hands-free)</h3>
+        <p className="muted" style={{ marginBottom: 10 }}>Let kids start talking by saying a wake word — no tap needed. Runs <b>100% on the device</b>; audio never leaves the Pi. Requires the wake-word add-on installed on the Pi (re-run the installer and say yes). When off, kids tap the avatar to talk.</p>
+        <div className="row" style={{ alignItems: 'flex-end', gap: 12 }}>
+          <div><label>Wake word</label>
+            <select value={wake.phrase} onChange={(e) => setWake((w) => ({ ...w, phrase: e.target.value }))}>
+              {c.wake.phrases.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+            </select></div>
+          <button className={`chip ${wake.enabled ? 'on' : ''}`} onClick={() => setWake((w) => ({ ...w, enabled: !w.enabled }))}>{wake.enabled ? 'On' : 'Off'}</button>
+        </div>
+        <div className="row" style={{ marginTop: 12 }}>
+          <button className="act" onClick={async () => { await api.saveConfig({ wake }); setWakeMsg('Saved ✓'); }}>Save</button>
+          <span className="muted">{wakeMsg}</span>
+        </div>
       </div>
       <div className="card">
         <h3 style={{ marginBottom: 6 }}>Chat personality &amp; safety</h3>

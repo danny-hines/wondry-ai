@@ -14,6 +14,7 @@ import profiles from './routes/profiles.js';
 import admin from './routes/admin.js';
 import tts from './routes/tts.js';
 import presence from './routes/presence.js';
+import wake from './routes/wake.js';
 import { ttsAvailable, ensureServer } from './services/tts.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -27,6 +28,7 @@ app.use('/api', artifacts);
 app.use('/api', profiles);
 app.use('/api', tts);
 app.use('/api', presence);
+app.use('/api', wake);
 app.use('/api/admin', admin);
 
 app.get('/api/health', (req, res) =>

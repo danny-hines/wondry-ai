@@ -76,12 +76,13 @@ export interface UsageReport {
 }
 export interface RichnessTier { id: string; label: string; description: string; provider: string; maxTokens: number; }
 export interface RichnessConfig { selected: string; default: string; dailyCap: number; tiers: RichnessTier[]; }
+export interface WakeConfig { enabled: boolean; phrase: string; phrases: { key: string; label: string }[]; }
 export interface AdminConfig {
   systemPrompt: string; defaultSystemPrompt: string;
   chatSystemPrompt: string; defaultChatSystemPrompt: string;
   readingSystemPrompt: string; defaultReadingSystemPrompt: string;
   routing: Record<string, string>; providers: string[]; liveGeneration: boolean;
-  richness: RichnessConfig;
+  richness: RichnessConfig; wake: WakeConfig;
 }
 export interface LogMessage {
   id: string; role: string; kind: string; text: string; created_at: number;

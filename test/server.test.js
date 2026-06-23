@@ -286,6 +286,15 @@ test('presence ingress validates state and reflects it (greet-on-approach)', asy
   assert.equal(got.enabled, false); // config.presence.enabled defaults off
 });
 
+test('wake word: config defaults off, and a detection POST is ignored while disabled', async () => {
+  const cfg = await api('/api/wake/config').then(j);
+  assert.equal(cfg.enabled, false);          // off by default
+  assert.ok(cfg.phrases.some((p) => p.key === cfg.phrase), 'phrase is one of the presets');
+  const r = await api('/api/wake', { method: 'POST', body: JSON.stringify({}) }).then(j);
+  assert.equal(r.ok, false);                 // disabled → no broadcast
+  assert.equal(r.reason, 'disabled');
+});
+
 test('server STT reports unavailable (falls back to browser) when whisper is not configured', async () => {
   const r = await api('/api/stt', { method: 'POST', headers: { 'content-type': 'audio/webm' }, body: Buffer.from([1, 2, 3, 4]) }).then(j);
   assert.equal(r.available, false);

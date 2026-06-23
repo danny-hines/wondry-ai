@@ -16,6 +16,9 @@ voices/
 vendor/
 .venv-piper/
 
+# Wake-word add-on venv (created by: install.sh)
+.venv-wake/
+
 # Saved audio/camera device prefs (written by: wondry audio)
 .kiosk-devices
 

@@ -42,7 +42,7 @@ export class AdminApi {
   private req(path: string, opts: RequestInit = {}) { return fetch('/api/admin' + path, { ...opts, headers: { ...this.h(), ...(opts.headers || {}) } }); }
   async ok(): Promise<boolean> { return (await this.req('/config')).ok; }
   config = () => this.req('/config').then(j<AdminConfig>);
-  saveConfig = (body: { systemPrompt?: string; chatSystemPrompt?: string; readingSystemPrompt?: string; richness?: string; dailyCap?: number }) => this.req('/config', { method: 'POST', body: JSON.stringify(body) });
+  saveConfig = (body: { systemPrompt?: string; chatSystemPrompt?: string; readingSystemPrompt?: string; richness?: string; dailyCap?: number; wake?: { enabled?: boolean; phrase?: string } }) => this.req('/config', { method: 'POST', body: JSON.stringify(body) });
   log = () => this.req('/log').then(j<{ messages: LogMessage[]; safety: SafetyEntry[] }>);
   artifacts = () => this.req('/artifacts').then(j<{ artifacts: Artifact[]; kids: Profile[] }>);
   setAudience = (id: string, profileId: string, on: boolean) => this.req(`/artifacts/${id}/audience`, { method: 'POST', body: JSON.stringify({ profileId, on }) });

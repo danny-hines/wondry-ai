@@ -73,6 +73,9 @@ export default function Kiosk() {
         if (evt.type === 'artifact.completed' && a) { completeCard(a); announce(a); refreshTray(); }
         else if (evt.type === 'artifact.failed' && a) { failCard(a); }
         else if (evt.type === 'presence' && evt.state === 'present') { maybeGreet(); }
+        // Wake word heard (on-device sidecar → /api/wake): start listening, same as
+        // a face tap. recRef.start() is a no-op if already listening.
+        else if (evt.type === 'wake') { if (viewRef.current === 'idle') setView('conversation'); setHintSeen(true); recRef.current?.start(); bumpIdle(); }
       };
       ws.onclose = () => { if (!closed) setTimeout(connect, 2000); };
     };

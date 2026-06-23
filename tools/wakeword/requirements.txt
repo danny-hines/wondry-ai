@@ -1,0 +1,6 @@
+# Wondry wake-word sidecar (on-device, openWakeWord). Installed into .venv-wake by
+# install.sh. openwakeword pulls in onnxruntime/tflite; sounddevice needs the system
+# libportaudio2 package (install.sh installs it).
+openwakeword
+sounddevice
+numpy

@@ -218,6 +218,21 @@ ENV
   ok "whisper.cpp wired up (kiosk will use on-device STT)"
 fi
 
+# ---- 8b. optional: wake word (openWakeWord sidecar) ------------------------
+# Hands-free "tap to talk": an on-device listener fires /api/wake when it hears the
+# word. Off until you enable a word in the parent console (Settings). 100% local.
+if confirm "Install the hands-free wake word add-on (openWakeWord, on-device)?" n; then
+  spin "Installing wake-word prerequisites" sudo apt-get install -y -qq python3-venv libportaudio2
+  [ -d "$INSTALL_DIR/.venv-wake" ] || python3 -m venv "$INSTALL_DIR/.venv-wake"
+  "$INSTALL_DIR/.venv-wake/bin/python" -m pip install --upgrade pip >/dev/null 2>&1 || true
+  spin "Installing openWakeWord (downloads wheels)" \
+    "$INSTALL_DIR/.venv-wake/bin/pip" install -r "$INSTALL_DIR/tools/wakeword/requirements.txt"
+  # pre-fetch the pretrained models so first run is instant
+  "$INSTALL_DIR/.venv-wake/bin/python" -c "import openwakeword.utils as u; u.download_models()" >/dev/null 2>&1 \
+    || warn "Couldn't pre-download wake-word models — they'll fetch on first run."
+  ok "Wake-word add-on installed — turn on a word in the parent console (Settings)."
+fi
+
 # ---- 9. kiosk autostart (X11: autologin → startx -nocursor → Openbox → Chromium)
 # Pi OS Lite has no display server. Install a minimal X11 kiosk stack and boot
 # straight into full-screen Chromium on tty1. `startx -- -nocursor` disables the
@@ -306,6 +321,10 @@ xset s off -dpms s noblank &
 
 # pin the chosen mic/speaker as PipeWire defaults + sane levels (see: wondry audio)
 ( bash '${INSTALL_DIR}/tools/devices.sh' apply ) &
+
+# hands-free wake word, if the add-on is installed (shares the mic via PipeWire;
+# does nothing until a word is enabled in the parent console). Runs in this session.
+( [ -x '${INSTALL_DIR}/.venv-wake/bin/python' ] && WONDRY_URL='http://localhost:${PORT}' '${INSTALL_DIR}/.venv-wake/bin/python' '${INSTALL_DIR}/tools/wakeword/wake.py' ) &
 
 # run the Chromium kiosk forever — relaunch if it ever crashes
 (
