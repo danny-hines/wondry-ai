@@ -191,7 +191,10 @@ if confirm "Install Piper TTS now (natural offline voice; recommended)?" y; then
 fi
 
 # ---- 8. optional: whisper.cpp STT (compiles on the Pi — slow) --------------
-KIOSK_URL="http://localhost:${PORT}/"
+# The kiosk always runs in server-STT mode: kiosk Chromium has no working Web
+# Speech API, so the mic must capture audio and POST to /api/stt. Without whisper
+# below, /api/stt returns empty ("didn't catch that") — install it to transcribe.
+KIOSK_URL="http://localhost:${PORT}/?stt=server"
 if confirm "Install whisper.cpp for on-device speech-to-text? (compiles — several minutes)" n; then
   sudo apt-get install -y -qq build-essential cmake >/dev/null
   if [ ! -x "$WHISPER_DIR/build/bin/whisper-cli" ]; then
@@ -201,12 +204,11 @@ if confirm "Install whisper.cpp for on-device speech-to-text? (compiles — seve
     cmake --build "$WHISPER_DIR/build" -j"$(nproc)" >/dev/null
   fi
   bash "$WHISPER_DIR/models/download-ggml-model.sh" base.en >/dev/null 2>&1 || warn "Model download failed — fetch ggml-base.en.bin manually."
-  # point the server at whisper, and the kiosk at the server-STT path
+  # point the server at whisper (the kiosk already runs in server-STT mode)
   grep -q '^WHISPER_CMD=' .env || cat >> .env <<ENV
 WHISPER_CMD=${WHISPER_DIR}/build/bin/whisper-cli
 WHISPER_MODEL=${WHISPER_DIR}/models/ggml-base.en.bin
 ENV
-  KIOSK_URL="http://localhost:${PORT}/?stt=server"
   sudo systemctl restart "$SERVICE"
   ok "whisper.cpp wired up (kiosk will use on-device STT)"
 fi

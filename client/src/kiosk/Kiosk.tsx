@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Avatar } from './Avatar';
 import type { AvatarEngine } from './avatarEngine';
 import { useSpeech } from './useSpeech';
+import { getStt, type SttSession } from './sttService';
 import { rendererFor } from '../content/registry';
 import { getProfiles, getTray, postTurn, markEngagement } from '../lib/api';
 import { mdToHtml } from '../lib/markdown';
@@ -173,13 +174,27 @@ export default function Kiosk() {
   const recRef = useRef<any>(null);
   const [micLive, setMicLive] = useState(false);
   useEffect(() => {
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) return;
-    const rec = new SR(); rec.lang = 'en-US'; rec.interimResults = false;
-    rec.onstart = () => { setMicLive(true); avatarRef.current?.setMood('listening'); };
-    rec.onend = () => { setMicLive(false); if (viewRef.current !== 'split') avatarRef.current?.setMood('idle'); };
-    rec.onresult = (e: any) => sendTurn(e.results[0][0].transcript);
-    recRef.current = rec;
+    // Use the shared STT engine (Web Speech in dev; whisper via /api/stt on the Pi,
+    // whose kiosk Chromium has no working Web Speech). A raw SpeechRecognition here
+    // would "start" then error out instantly in Chromium, so the mic never worked.
+    const engine = getStt();
+    if (!engine.available) return;
+    let session: SttSession | null = null;
+    recRef.current = {
+      start() {
+        if (session) return;
+        setMicLive(true);
+        avatarRef.current?.setMood('listening');
+        session = engine.listen();
+        session.result.then(({ transcript }) => {
+          session = null;
+          setMicLive(false);
+          if (viewRef.current !== 'split') avatarRef.current?.setMood('idle');
+          if (transcript) sendTurn(transcript);
+        });
+      },
+      stop() { session?.stop(); },
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
