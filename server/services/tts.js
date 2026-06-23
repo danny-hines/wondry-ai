@@ -4,7 +4,7 @@
 //  2) in-memory phrase CACHE: repeated lines (fillers, announcements) return instantly.
 //  3) the kiosk chunks replies by sentence, so first audio starts after sentence 1.
 // Falls back to spawn-per-call CLI, then to browser speech, if none of the above is available.
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -15,11 +15,40 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..', '..');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Reserved voice id: synthesize on-device in the browser (Chromium SpeechSynthesis →
-// speech-dispatcher/espeak on the Pi) instead of via Piper. Robotic but instant — fits
-// the dot-matrix look. The server never produces audio for it; /api/tts signals the
-// client (204) to use its speakFallback path. Kept in sync with the client option.
+// Reserved "Robot" voice id. Robotic but instant — fits the dot-matrix look. We
+// synthesize it server-side with espeak-ng (real WAV → reliable audio + avatar
+// lip-sync through the normal pipeline). On a machine without espeak-ng (e.g. a
+// dev laptop) the route falls back to the browser's SpeechSynthesis via a 204.
+// The stored id stays 'browser' for back-compat with already-saved profiles.
 export const BROWSER_VOICE = 'browser';
+
+// ---- espeak-ng (server-side Robot voice) ----
+const ESPEAK = process.env.ESPEAK_CMD || 'espeak-ng';
+let _espeakOk;
+export function espeakAvailable() {
+  if (_espeakOk !== undefined) return _espeakOk;
+  try { _espeakOk = spawnSync(ESPEAK, ['--version'], { timeout: 3000 }).status === 0; }
+  catch { _espeakOk = false; }
+  return _espeakOk;
+}
+export function synthViaEspeak(text) {
+  return new Promise((resolve, reject) => {
+    const tmp = path.join(os.tmpdir(), `espeak-${Date.now()}-${Math.random().toString(36).slice(2)}.wav`);
+    // Defaults: US English, a touch slow, slightly raised pitch — clear for kids,
+    // still robotic. Override via config.json -> tts.espeakArgs.
+    const args = ['-w', tmp, ...((ttsCfg().espeakArgs || ['-v', 'en-us', '-s', '160', '-p', '55']).map(String)), String(text)];
+    let err = '', proc;
+    try { proc = spawn(ESPEAK, args, { stdio: ['ignore', 'ignore', 'pipe'] }); }
+    catch (e) { return reject(e); }
+    proc.on('error', reject);
+    proc.stderr.on('data', (d) => { err += d; });
+    proc.on('close', (code) => {
+      if (code !== 0) { try { fs.rmSync(tmp, { force: true }); } catch {} return reject(new Error(`espeak-ng exit ${code}: ${err.slice(0, 200)}`)); }
+      try { const wav = fs.readFileSync(tmp); fs.rmSync(tmp, { force: true }); resolve(wav); }
+      catch (e) { reject(e); }
+    });
+  });
+}
 
 const ttsCfg = () => getConfig().tts || {};
 export function voicesDir() { return process.env.PIPER_VOICES_DIR || path.join(ROOT, ttsCfg().voicesDir || 'voices'); }

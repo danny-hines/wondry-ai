@@ -3,7 +3,7 @@
 // GET /api/voices -> installed voice list (for the admin per-kid dropdown).
 import express from 'express';
 import { db } from '../db.js';
-import { synthesize, ttsAvailable, listVoices, BROWSER_VOICE } from '../services/tts.js';
+import { synthesize, ttsAvailable, listVoices, BROWSER_VOICE, espeakAvailable, synthViaEspeak } from '../services/tts.js';
 
 export const router = express.Router();
 
@@ -19,9 +19,22 @@ router.post('/tts', async (req, res) => {
     const p = db.prepare('SELECT voice FROM profiles WHERE id=?').get(profileId);
     v = p && p.voice;
   }
-  // On-device voice: no server audio — 204 tells the client to speak via the browser.
-  // Handled before the ttsAvailable guard so it works even with no Piper installed.
-  if (v === BROWSER_VOICE) { res.setHeader('X-TTS-Mode', 'browser'); return res.status(204).end(); }
+  // Robot voice: synthesize server-side with espeak-ng (real WAV → reliable audio +
+  // avatar lip-sync). If espeak-ng isn't installed (e.g. a dev laptop), fall back to
+  // a 204 so the client speaks it via the browser's SpeechSynthesis. Handled before
+  // the ttsAvailable guard so the Robot voice works with no Piper installed.
+  if (v === BROWSER_VOICE) {
+    if (espeakAvailable()) {
+      try {
+        const wav = await synthViaEspeak(String(text).slice(0, 800));
+        res.setHeader('Content-Type', 'audio/wav');
+        res.setHeader('Cache-Control', 'no-store');
+        return res.send(wav);
+      } catch { /* fall through to the browser fallback below */ }
+    }
+    res.setHeader('X-TTS-Mode', 'browser');
+    return res.status(204).end();
+  }
   if (!ttsAvailable()) return res.status(503).json({ error: 'tts not configured' });
   try {
     const wav = await synthesize(String(text).slice(0, 800), v);
