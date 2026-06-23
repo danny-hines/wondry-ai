@@ -27,6 +27,19 @@ list_audio() {
 
 id_for() { pactl list short "$1" 2>/dev/null | awk -F'\t' -v N="$2" '$2==N{print $1; exit}'; }
 
+# fraction (0.85) -> integer percent (85), for showing the current default
+pct_of() { awk -v f="${1:-0.85}" 'BEGIN{printf "%d", f*100 + 0.5}'; }
+
+# ask_vol <label> <default-percent>  -> echoes a fraction like 0.85 (empty = keep)
+ask_vol() {
+  local label="$1" def="$2" reply
+  read -r -p "  $label volume % [$def]: " reply </dev/tty || true
+  reply="${reply:-$def}"
+  [[ "$reply" =~ ^[0-9]+$ ]] || { echo ""; return; }
+  [ "$reply" -gt 150 ] && reply=150   # allow a little boost, but cap it
+  awk -v p="$reply" 'BEGIN{printf "%.2f", p/100}'
+}
+
 # choose <sources|sinks> <label>  -> echoes the chosen stable NAME (empty = keep)
 choose() {
   list_audio "$1"
@@ -61,20 +74,28 @@ choose_cam() {
 cmd_select() {
   command -v pactl >/dev/null 2>&1 || { echo "pactl not found — run: sudo apt-get install -y pulseaudio-utils  then retry." >&2; exit 1; }
   pactl info >/dev/null 2>&1 || { echo "PipeWire isn't reachable here. Run this on the Pi after boot:  wondry audio" >&2; exit 1; }
-  local src sink cam
+  # load any existing prefs first, so the volume prompts can show current values
+  [ -f "$PREF" ] && . "$PREF"
+  local src sink cam sinkvol srcvol
   src="$(choose sources microphone)"
   sink="$(choose sinks speaker)"
   cam="$(choose_cam)"
-  # merge over any existing prefs (blank/0 keeps the previous value)
-  [ -f "$PREF" ] && . "$PREF"
-  [ -n "$src" ]  && AUDIO_SOURCE="$src"
-  [ -n "$sink" ] && AUDIO_SINK="$sink"
-  [ -n "$cam" ]  && VIDEO_DEVICE="$cam"
+  echo "Set volume levels (Enter to keep):" >&2
+  sinkvol="$(ask_vol 'Speaker (output)'   "$(pct_of "${AUDIO_SINK_VOLUME:-0.85}")")"
+  srcvol="$(ask_vol  'Microphone (input)' "$(pct_of "${AUDIO_SOURCE_VOLUME:-0.85}")")"
+  # merge over existing prefs (blank/0 keeps the previous value)
+  [ -n "$src" ]     && AUDIO_SOURCE="$src"
+  [ -n "$sink" ]    && AUDIO_SINK="$sink"
+  [ -n "$cam" ]     && VIDEO_DEVICE="$cam"
+  [ -n "$sinkvol" ] && AUDIO_SINK_VOLUME="$sinkvol"
+  [ -n "$srcvol" ]  && AUDIO_SOURCE_VOLUME="$srcvol"
   {
-    echo "# Wondry device prefs — stable names, re-applied each boot by 'devices.sh apply'."
-    [ -n "${AUDIO_SOURCE:-}" ] && echo "AUDIO_SOURCE=$AUDIO_SOURCE"
-    [ -n "${AUDIO_SINK:-}" ]   && echo "AUDIO_SINK=$AUDIO_SINK"
-    [ -n "${VIDEO_DEVICE:-}" ] && echo "VIDEO_DEVICE=$VIDEO_DEVICE"
+    echo "# Wondry device prefs — stable names + levels, re-applied each boot by 'devices.sh apply'."
+    [ -n "${AUDIO_SOURCE:-}" ]        && echo "AUDIO_SOURCE=$AUDIO_SOURCE"
+    [ -n "${AUDIO_SINK:-}" ]          && echo "AUDIO_SINK=$AUDIO_SINK"
+    [ -n "${VIDEO_DEVICE:-}" ]        && echo "VIDEO_DEVICE=$VIDEO_DEVICE"
+    [ -n "${AUDIO_SINK_VOLUME:-}" ]   && echo "AUDIO_SINK_VOLUME=$AUDIO_SINK_VOLUME"
+    [ -n "${AUDIO_SOURCE_VOLUME:-}" ] && echo "AUDIO_SOURCE_VOLUME=$AUDIO_SOURCE_VOLUME"
   } > "$PREF"
   echo; echo "Saved to $PREF:"; sed 's/^/  /' "$PREF"
   cmd_apply
@@ -89,10 +110,11 @@ cmd_apply() {
   local id
   if [ -n "${AUDIO_SOURCE:-}" ]; then id="$(id_for sources "$AUDIO_SOURCE")"; [ -n "$id" ] && wpctl set-default "$id" 2>/dev/null || true; fi
   if [ -n "${AUDIO_SINK:-}" ];   then id="$(id_for sinks   "$AUDIO_SINK")";   [ -n "$id" ] && wpctl set-default "$id" 2>/dev/null || true; fi
-  # sane levels: unmute, and tame mic gain so a close/loud speaker doesn't clip
-  wpctl set-mute   @DEFAULT_AUDIO_SOURCE@ 0    2>/dev/null || true
-  wpctl set-volume @DEFAULT_AUDIO_SOURCE@ 0.85 2>/dev/null || true
-  wpctl set-mute   @DEFAULT_AUDIO_SINK@   0    2>/dev/null || true
+  # unmute + apply the saved levels (default 85% if never set via `wondry audio`)
+  wpctl set-mute   @DEFAULT_AUDIO_SOURCE@ 0 2>/dev/null || true
+  wpctl set-volume @DEFAULT_AUDIO_SOURCE@ "${AUDIO_SOURCE_VOLUME:-0.85}" 2>/dev/null || true
+  wpctl set-mute   @DEFAULT_AUDIO_SINK@   0 2>/dev/null || true
+  wpctl set-volume @DEFAULT_AUDIO_SINK@   "${AUDIO_SINK_VOLUME:-0.85}" 2>/dev/null || true
 }
 
 case "${1:-}" in

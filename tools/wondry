@@ -51,7 +51,7 @@ case "${1:-help}" in
     echo "  start | stop"
     echo "  status    service status"
     echo "  logs      follow the server logs"
-    echo "  audio     pick the microphone / speaker / camera (PipeWire defaults)"
+    echo "  audio     pick the microphone / speaker / camera + set volume levels"
     echo "  version   the installed git revision"
     echo "  url       the kiosk + parent-console URLs"
     ;;
