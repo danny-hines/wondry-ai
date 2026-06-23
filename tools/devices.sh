@@ -59,7 +59,7 @@ choose_cam() {
 }
 
 cmd_select() {
-  command -v pactl >/dev/null 2>&1 || { echo "pactl not found — install pipewire-pulse, then retry." >&2; exit 1; }
+  command -v pactl >/dev/null 2>&1 || { echo "pactl not found — run: sudo apt-get install -y pulseaudio-utils  then retry." >&2; exit 1; }
   pactl info >/dev/null 2>&1 || { echo "PipeWire isn't reachable here. Run this on the Pi after boot:  wondry audio" >&2; exit 1; }
   local src sink cam
   src="$(choose sources microphone)"

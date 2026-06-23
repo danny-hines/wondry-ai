@@ -229,7 +229,7 @@ say "Setting up the full-screen kiosk on boot…"
 spin "Installing kiosk stack (Xorg, Openbox, audio)" \
   sudo apt-get install -y --no-install-recommends \
     xserver-xorg xinit x11-xserver-utils openbox unclutter \
-    pipewire pipewire-pulse wireplumber
+    pipewire pipewire-pulse wireplumber pulseaudio-utils
 sudo usermod -aG video,render,input,audio,tty "$USER" 2>/dev/null || true
 # PipeWire runs as the logged-in user; ensure its services come up in the session.
 systemctl --user enable pipewire pipewire-pulse wireplumber >/dev/null 2>&1 || true
