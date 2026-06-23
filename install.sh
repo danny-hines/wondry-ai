@@ -276,6 +276,10 @@ cat > "$HOME/.config/openbox/autostart" <<AUTO
 # never blank/sleep the kiosk screen
 xset s off -dpms s noblank &
 
+# tame USB-mic capture gain so a close/loud speaker doesn't clip (best-effort:
+# PipeWire may still be coming up, so don't fail the kiosk if it isn't ready)
+( for i in 1 2 3 4 5; do wpctl set-volume @DEFAULT_AUDIO_SOURCE@ 0.85 2>/dev/null && break; sleep 1; done ) &
+
 # run the Chromium kiosk forever — relaunch if it ever crashes
 (
   while true; do

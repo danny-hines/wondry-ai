@@ -1,0 +1,19 @@
+# Normalize text files to LF in the repo and on checkout everywhere, so shell
+# scripts (install.sh) and configs stay valid on the Pi regardless of the dev OS.
+* text=auto eol=lf
+
+# Scripts must always be LF (CRLF breaks the shebang/`set -e` on Linux).
+*.sh   text eol=lf
+
+# Binary assets: no EOL conversion, no textual diff.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.webp binary
+*.wav  binary
+*.onnx binary
+*.bin  binary
+*.woff  binary
+*.woff2 binary
