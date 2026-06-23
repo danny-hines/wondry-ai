@@ -33,13 +33,13 @@
   transition: flex-basis .5s cubic-bezier(.4,0,.2,1), flex-grow .5s cubic-bezier(.4,0,.2,1), padding .4s ease; will-change: flex-basis, flex-grow; }
 #avatarWrap { position: relative; display: flex; align-items: center; justify-content: center; transition: transform .5s cubic-bezier(.4,0,.2,1); will-change: transform; transform: scale(1); cursor: pointer; }
 
-/* Voice-only kiosk: "Tap to talk" affordance under the avatar's face, and a soft
-   accent ring while listening. (.taptotalk is only rendered in voice-only mode.) */
+/* Voice-only kiosk: "Tap to talk" affordance under the avatar's face. The
+   listening state is shown by the avatar's equalizer (avatarEngine), not a ring.
+   (.taptotalk is only rendered in voice-only mode.) */
 .taptotalk { position: absolute; bottom: -34px; left: 50%; transform: translateX(-50%); white-space: nowrap;
   font-size: 1rem; font-weight: 700; letter-spacing: .3px; color: var(--muted); pointer-events: none;
   animation: taphint 2.4s ease-in-out infinite; }
 @keyframes taphint { 0%, 100% { opacity: .55; } 50% { opacity: .95; } }
-#avatarWrap.listening { box-shadow: 0 0 0 4px color-mix(in srgb, var(--user, #16b8a6) 45%, transparent); border-radius: 50%; }
 #avatarWrap.listening .taptotalk { color: var(--user, #16b8a6); opacity: 1; animation: none; }
 .state-split .taptotalk { display: none; }
 #avatarWrap canvas { width: 300px; height: 300px; }

@@ -119,9 +119,9 @@ export default function Kiosk() {
     if (viewRef.current !== 'idle') return;
     const u = userRef.current; if (!u) return;
     lastGreetRef.current = t;
+    // Greeting is the avatar SPEAKING — stay idle so it lip-syncs (listening now
+    // shows the equalizer, which would be wrong here).
     speak(`Hi${u.name ? ' ' + u.name : ''}! I'm right here whenever you want to explore something fun.`, u.id);
-    avatarRef.current?.setMood('listening');
-    setTimeout(() => avatarRef.current?.setMood('idle'), 1600);
   }, [speak]);
 
   useEffect(() => { bubblesRef.current?.lastElementChild?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [items]);
@@ -218,14 +218,41 @@ export default function Kiosk() {
     const engine = getStt();
     if (!engine.available) return;
     let session: SttSession | null = null;
+    // Feed the child's mic amplitude to the avatar so the listening equalizer reacts
+    // to their voice (Web Speech exposes no levels). Separate from STT; if the mic is
+    // unavailable the equalizer falls back to its synthetic floor.
+    let ampStream: MediaStream | null = null, ampCtx: AudioContext | null = null, ampRAF = 0;
+    const startAmp = async () => {
+      try { ampStream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+      catch { return; }
+      ampCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const src = ampCtx.createMediaStreamSource(ampStream);
+      const an = ampCtx.createAnalyser(); an.fftSize = 512; src.connect(an);
+      const data = new Uint8Array(an.fftSize);
+      const tick = () => {
+        an.getByteTimeDomainData(data);
+        let sum = 0; for (let i = 0; i < data.length; i++) { const v = (data[i] - 128) / 128; sum += v * v; }
+        avatarRef.current?.setLevel(Math.min(1, Math.sqrt(sum / data.length) * 6));
+        ampRAF = requestAnimationFrame(tick);
+      };
+      tick();
+    };
+    const stopAmp = () => {
+      cancelAnimationFrame(ampRAF);
+      if (ampStream) ampStream.getTracks().forEach((t) => t.stop());
+      if (ampCtx) ampCtx.close().catch(() => {});
+      ampStream = null; ampCtx = null;
+    };
     recRef.current = {
       start() {
         if (session) return;
         setMicLive(true);
         avatarRef.current?.setMood('listening');
+        startAmp();
         session = engine.listen();
         session.result.then(({ transcript }) => {
           session = null;
+          stopAmp();
           setMicLive(false);
           if (viewRef.current !== 'split') avatarRef.current?.setMood('idle');
           if (transcript) sendTurn(transcript);
@@ -233,6 +260,7 @@ export default function Kiosk() {
       },
       stop() { session?.stop(); },
     };
+    return () => { stopAmp(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
@@ -245,7 +273,7 @@ export default function Kiosk() {
         <div id="avatarWrap" className={voiceOnly && micLive ? 'listening' : ''}
           onClick={() => {
             if (voiceOnly) { toggleListen(); return; }
-            if (view === 'idle') { setView('conversation'); avatarRef.current?.setMood('listening'); setTimeout(() => avatarRef.current?.setMood('idle'), 1200); }
+            if (view === 'idle') setView('conversation');
           }}>
           <Avatar ref={avatarRef} />
           {voiceOnly && <div className="taptotalk">{micLive ? 'Listening… tap to stop' : 'Tap to talk'}</div>}
