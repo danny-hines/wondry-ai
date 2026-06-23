@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Avatar } from './Avatar';
 import { ParentMenu } from './ParentMenu';
 import type { AvatarEngine } from './avatarEngine';
@@ -39,6 +39,9 @@ export default function Kiosk() {
   const { speak, speakingId } = useSpeech(avatarRef);
   const bubblesRef = useRef<HTMLDivElement>(null);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cornerRef = useRef<HTMLDivElement>(null);
+  const rightRef = useRef<HTMLDivElement>(null);
+  const wasSplit = useRef(false);
 
   const user = profiles[userIdx] || null;
   const userRef = useRef<Profile | null>(null); userRef.current = user;
@@ -120,6 +123,25 @@ export default function Kiosk() {
   }, [speak]);
 
   useEffect(() => { bubblesRef.current?.lastElementChild?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [items]);
+
+  // Opening the pages panel: slide the whole panel — and its docked header controls
+  // (initials + My pages) — in from off the bottom-right, so it reads as one window
+  // expanding from the corner where the controls live. Same pixel offset on both so
+  // they travel as a single unit. (0.8 = how far off-screen it starts; tunable.)
+  useLayoutEffect(() => {
+    const isSplit = view === 'split';
+    if (isSplit && !wasSplit.current) {
+      const panel = rightRef.current;
+      const r = panel?.getBoundingClientRect();
+      if (panel && r) {
+        const from = `translate(${r.width * 0.8}px, ${r.height * 0.8}px)`;
+        const opts = { duration: 540, easing: 'cubic-bezier(.16,1,.3,1)' };
+        panel.animate([{ transform: from, opacity: 0.35 }, { transform: 'none', opacity: 1 }], opts);
+        cornerRef.current?.animate([{ transform: from }, { transform: 'none' }], opts);
+      }
+    }
+    wasSplit.current = isSplit;
+  }, [view]);
 
   const sendTurn = async (text: string) => {
     text = text.trim(); if (!text || !user) return;
@@ -279,6 +301,9 @@ export default function Kiosk() {
 
   const openCard = openId ? items.find((it) => it.kind === 'card' && it.artifact.id === openId) : null;
   const openGenerating = !!(openCard && openCard.kind === 'card' && openCard.artifact.status === 'generating');
+  // In the open panel the My-pages button becomes the panel's close (✕); when closed
+  // it opens the tray.
+  const panelOpen = view === 'split';
 
   return (
     <div className={`kiosk-root state-${view}${full ? ' full' : ''}${user?.theme === 'dark' ? ' theme-dark' : ''}${hideCursor ? ' hide-cursor' : ''}`} style={{ ['--user' as any]: user?.color || '#16b8a6', ['--user-fg' as any]: readableOn(user?.color || '#16b8a6') }} onPointerDown={bumpIdle}>
@@ -313,10 +338,9 @@ export default function Kiosk() {
         </div>
       </div>
 
-      <div id="right">
+      <div id="right" ref={rightRef}>
         <div id="rightbar">
           <button id="full" title="Toggle full screen" onClick={() => setFull((f) => !f)}>⤢</button>
-          <button id="close" title="Close" onClick={closeRight}>✕</button>
         </div>
         <div id="content">
           {splitMode === 'tray'
@@ -344,11 +368,18 @@ export default function Kiosk() {
         </div>
       </div>
 
-      <div id="corner">
+      <div id="corner" ref={cornerRef}>
         <span id="initials" title="Tap to switch user" onClick={switchUser}>{user?.initials || '··'}</span>
-        <button id="trayBtn" className={tray.count === 0 ? 'empty' : ''} title="My pages" onClick={openTray}>
-          <span className="dot" />
-          {tray.unseen > 0 && <span id="trayBadge">{tray.unseen}</span>}
+        <button id="trayBtn" className={tray.count === 0 ? 'empty' : ''} title={panelOpen ? 'Close' : 'My pages'} onClick={panelOpen ? closeRight : openTray}>
+          {panelOpen
+            ? <span className="trayX" aria-hidden="true">✕</span>
+            : <svg className="trayIcon" viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="3.5" y="3.5" width="7.5" height="7.5" rx="2" />
+                <rect x="13" y="3.5" width="7.5" height="7.5" rx="2" />
+                <rect x="3.5" y="13" width="7.5" height="7.5" rx="2" />
+                <rect x="13" y="13" width="7.5" height="7.5" rx="2" />
+              </svg>}
+          {!panelOpen && tray.unseen > 0 && <span id="trayBadge">{tray.unseen}</span>}
         </button>
       </div>
 

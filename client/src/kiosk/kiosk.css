@@ -55,17 +55,26 @@
 .state-split #left { flex: 0 0 36%; flex-direction: column; gap: 10px; padding: 16px; }
 .state-split #avatarWrap { transform: scale(0.5); }
 .state-split #convo { width: 100%; opacity: 1; flex: 1; }
-.state-split #right { display: flex; }
+/* Absolutely positioned at its final size (the left pane only reserves 36%), so the
+   panel's content is laid out once — the open animation just slides this fixed-size
+   box in (Kiosk.tsx), with no mid-animation reflow of the page tiles. */
+.state-split #right { display: flex; position: absolute; top: 0; right: 0; bottom: 0; left: 36%; }
 .state-split.full #left { flex: 0 0 0%; padding: 0; overflow: hidden; }
+.state-split.full #right { left: 0; }
 
 #right { flex: 1; min-width: 0; display: none; position: relative; border-left: 3px solid var(--surface-border); background: var(--surface); }
 #rightbar { position: absolute; top: 10px; right: 12px; z-index: 5; display: flex; gap: 8px; }
+/* Expand sits at the panel's top-left in the open state (the corner header is top-right). */
+.state-split #rightbar { left: 12px; right: auto; }
 #rightbar button { width: 38px; height: 38px; border: none; border-radius: 10px; cursor: pointer; background: var(--btn-bg); color: var(--btn-fg); font-size: 18px; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
 #rightbar button:hover { background: var(--btn-bg-hover); }
 #content { position: absolute; inset: 0; }
+/* Clear the header band (expand on the left, initials/✕ on the right) so page content
+   and titles aren't tucked under the floating controls. */
+.state-split #content { top: 60px; }
 #content iframe { width: 100%; height: 100%; border: none; }
 
-.tray { padding: 64px 28px 28px; display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); align-content: start; overflow-y: auto; height: 100%; }
+.tray { padding: 18px 28px 28px; display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); align-content: start; overflow-y: auto; height: 100%; }
 .tile { border: none; cursor: pointer; border-radius: 18px; padding: 18px 14px; color: #fff; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; min-height: 120px; box-shadow: 0 6px 16px rgba(0,0,0,.12); transition: transform .15s; text-align: left; position: relative; }
 .tile:hover { transform: translateY(-4px); }
 .tile .te { font-size: 2.4rem; } .tile .tt { font-weight: 800; font-size: 1.05rem; }
@@ -113,12 +122,25 @@
 .artcard .go { font-weight: 800; color: var(--user, #16b8a6); white-space: nowrap; }
 .artcard.failed { border-color: #fca5a5; } .artcard.failed .go { color: #ef4444; }
 
+/* Corner controls (switch-user initials + My pages). Bottom-right by default with
+   generous touch targets (~56px); they dock into the open panel's header in split
+   view (JS FLIPs the move — see Kiosk.tsx). */
 #corner { position: absolute; right: 0; bottom: 0; z-index: 10; display: flex; align-items: stretch; }
-#initials { background: var(--user, #16b8a6); color: var(--user-fg, #fff); font-weight: 800; letter-spacing: .5px; display: flex; align-items: center; padding: 0 12px; cursor: pointer; font-size: 15px; border-radius: 12px 0 0 0; transition: background-color .5s ease; }
-#trayBtn { background: var(--user, #16b8a6); border: none; cursor: pointer; padding: 10px 12px; position: relative; display: flex; align-items: center; transition: background-color .5s ease; }
+#initials { background: var(--user, #16b8a6); color: var(--user-fg, #fff); font-weight: 800; letter-spacing: .5px; display: flex; align-items: center; justify-content: center; min-width: 30px; padding: 0 20px; min-height: 56px; cursor: pointer; font-size: 19px; border-radius: 14px 0 0 0; transition: background-color .5s ease; }
+#trayBtn { background: var(--user, #16b8a6); border: none; cursor: pointer; padding: 0 20px; min-height: 56px; position: relative; display: flex; align-items: center; justify-content: center; transition: background-color .5s ease; }
 #trayBtn.empty { display: none; }
-#trayBtn .dot { width: 16px; height: 16px; border-radius: 50%; background: var(--user-fg, #fff); opacity: .9; display: block; }
-#trayBadge { position: absolute; top: 2px; right: 2px; background: #ef4444; color: #fff; font-size: 11px; font-weight: 800; min-width: 16px; height: 16px; border-radius: 9px; display: flex; align-items: center; justify-content: center; padding: 0 4px; }
+#trayBtn .trayIcon { width: 25px; height: 25px; display: block; fill: var(--user-fg, #fff); opacity: .95; }
+#trayBadge { position: absolute; top: 6px; right: 8px; background: #ef4444; color: #fff; font-size: 11px; font-weight: 800; min-width: 16px; height: 16px; border-radius: 9px; display: flex; align-items: center; justify-content: center; padding: 0 4px; }
+
+/* Docked flush to the panel's top-right as one combined unit: switch-user initials +
+   a ✕ that closes the panel (the My-pages icon's open-state role). Top/right edges sit
+   flush to the display corner; only the inner bottom-left corner is rounded so it reads
+   as a tab hanging off the panel header. */
+.state-split #corner { left: auto; bottom: auto; top: 0; right: 0; gap: 0; align-items: stretch; }
+.state-split #initials { border-radius: 0 0 0 14px; }
+.state-split #trayBtn { border-radius: 0; }
+.state-split #trayBtn.empty { display: flex; }   /* it's the close button now — show even with an empty tray */
+.trayX { font-size: 23px; font-weight: 700; line-height: 1; color: var(--user-fg, #fff); }
 
 #inputbar { display: flex; gap: 8px; padding: 8px 6px 2px; }
 #prompt { flex: 1; font: inherit; font-size: 1.05rem; padding: 12px 16px; border: 2px solid var(--input-border); border-radius: 14px; outline: none; background: var(--input-bg); color: var(--fg); }
