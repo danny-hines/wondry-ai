@@ -173,6 +173,17 @@ export default function Kiosk() {
 
   const recRef = useRef<any>(null);
   const [micLive, setMicLive] = useState(false);
+
+  // Touchscreen kiosk: hide the mouse pointer across the whole viewport. The cage
+  // compositor parks a cursor at center on boot; a CSS rule on .kiosk-root misses
+  // the inset margin around it, so set it on <html> while the kiosk is mounted
+  // (restored on unmount, so the parent console keeps its cursor).
+  useEffect(() => {
+    const html = document.documentElement;
+    const prev = html.style.cursor;
+    html.style.cursor = 'none';
+    return () => { html.style.cursor = prev; };
+  }, []);
   useEffect(() => {
     // Use the shared STT engine (Web Speech in dev; whisper via /api/stt on the Pi,
     // whose kiosk Chromium has no working Web Speech). A raw SpeechRecognition here
