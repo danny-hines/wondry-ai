@@ -229,6 +229,20 @@ sudo usermod -aG video,render,input,audio,tty "$USER" 2>/dev/null || true
 # PipeWire runs as the logged-in user; ensure its services come up in the session.
 systemctl --user enable pipewire pipewire-pulse wireplumber >/dev/null 2>&1 || true
 
+# Force Xorg to use the vc4 KMS display via the `modesetting` driver as primary.
+# A Pi exposes two DRM nodes (v3d render + vc4 display); without this, Xorg also
+# autoconfigures the legacy `fbdev` driver, which fails fatally with
+# "Cannot run in framebuffer mode … specify busIDs" and X never starts.
+sudo mkdir -p /etc/X11/xorg.conf.d
+sudo tee /etc/X11/xorg.conf.d/99-vc4-kms.conf >/dev/null <<'XORG'
+Section "OutputClass"
+  Identifier "vc4"
+  MatchDriver "vc4"
+  Driver "modesetting"
+  Option "PrimaryGPU" "true"
+EndSection
+XORG
+
 # Console autologin on tty1 so a session exists to start X from
 # (identical to raspi-config's "Console Autologin").
 sudo mkdir -p /etc/systemd/system/getty@tty1.service.d
