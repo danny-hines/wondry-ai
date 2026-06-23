@@ -237,18 +237,23 @@ systemctl --user enable pipewire pipewire-pulse wireplumber >/dev/null 2>&1 || t
 # Fonts: Pi OS Lite ships almost none, so emoji icons (🎤, ✨) render as tofu boxes
 # and the UI + generated pages fall back to one default font. Install a color-emoji
 # font, a rounded UI font, a Comic-Sans-alike, and broad symbol coverage…
-spin "Installing fonts (emoji, rounded UI, symbols)" \
+spin "Installing fonts (emoji, UI, symbols)" \
   sudo apt-get install -y --no-install-recommends \
-    fonts-noto-color-emoji fonts-noto-core fonts-nunito fonts-comic-neue
+    fonts-noto-color-emoji fonts-noto-core fonts-comic-neue
+# A rounded UI font if the distro packages one (the name varies and some releases
+# have neither) — ignore failure; the alias below falls back to Noto Sans.
+sudo apt-get install -y --no-install-recommends fonts-quicksand >/dev/null 2>&1 \
+  || sudo apt-get install -y --no-install-recommends fonts-comfortaa >/dev/null 2>&1 || true
 # …then alias the Apple/Windows family names the app + already-generated artifacts
-# request to the installed fonts, so they render instead of falling back. This is
-# retroactive — no app/code change or artifact regeneration needed.
+# request to the installed fonts, so they render instead of falling back. <prefer>
+# lists several — fontconfig uses the first installed. Retroactive: no app change
+# or artifact regeneration needed.
 sudo tee /etc/fonts/local.conf >/dev/null <<'FONTS'
 <?xml version="1.0"?>
 <!DOCTYPE fontconfig SYSTEM "fonts.dtd">
 <fontconfig>
-  <alias binding="strong"><family>ui-rounded</family><prefer><family>Nunito</family></prefer></alias>
-  <alias binding="strong"><family>Segoe UI</family><prefer><family>Nunito</family></prefer></alias>
+  <alias binding="strong"><family>ui-rounded</family><prefer><family>Quicksand</family><family>Comfortaa</family><family>Noto Sans</family></prefer></alias>
+  <alias binding="strong"><family>Segoe UI</family><prefer><family>Quicksand</family><family>Comfortaa</family><family>Noto Sans</family></prefer></alias>
   <alias binding="strong"><family>Comic Sans MS</family><prefer><family>Comic Neue</family></prefer></alias>
 </fontconfig>
 FONTS
