@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Avatar } from './Avatar';
+import { ParentMenu } from './ParentMenu';
 import type { AvatarEngine } from './avatarEngine';
 import { useSpeech } from './useSpeech';
 import { getStt, type SttSession } from './sttService';
@@ -32,6 +33,7 @@ export default function Kiosk() {
   const [trayList, setTrayList] = useState<Artifact[]>([]);
   const [toast, setToast] = useState<{ text: string; onClick: () => void } | null>(null);
   const [prompt, setPrompt] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const avatarRef = useRef<AvatarEngine | null>(null);
   const { speak, speakingId } = useSpeech(avatarRef);
@@ -193,6 +195,17 @@ export default function Kiosk() {
     if (f === '0') return false;
     return import.meta.env.PROD;
   })();
+  // Press-and-hold the avatar for 5s to open the parent menu (PIN-gated). The hold
+  // timer is cancelled on release/leave; if it fires, heldRef suppresses the tap so
+  // a long press doesn't also start a listen session.
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const heldRef = useRef(false);
+  const startHold = () => {
+    heldRef.current = false;
+    holdTimer.current = setTimeout(() => { heldRef.current = true; setMenuOpen(true); }, 5000);
+  };
+  const cancelHold = () => { if (holdTimer.current) { clearTimeout(holdTimer.current); holdTimer.current = null; } };
+
   // Tap-to-talk: toggle a listen session (used by the avatar tap in voice-only mode).
   const toggleListen = () => {
     if (viewRef.current === 'idle') setView('conversation');
@@ -271,7 +284,9 @@ export default function Kiosk() {
     <div className={`kiosk-root state-${view}${full ? ' full' : ''}${user?.theme === 'dark' ? ' theme-dark' : ''}${hideCursor ? ' hide-cursor' : ''}`} style={{ ['--user' as any]: user?.color || '#16b8a6', ['--user-fg' as any]: readableOn(user?.color || '#16b8a6') }} onPointerDown={bumpIdle}>
       <div id="left">
         <div id="avatarWrap" className={voiceOnly && micLive ? 'listening' : ''}
+          onPointerDown={startHold} onPointerUp={cancelHold} onPointerLeave={cancelHold} onPointerCancel={cancelHold}
           onClick={() => {
+            if (heldRef.current) { heldRef.current = false; return; }  // long-press already opened the menu
             if (voiceOnly) { toggleListen(); return; }
             if (view === 'idle') setView('conversation');
           }}>
@@ -338,6 +353,8 @@ export default function Kiosk() {
       </div>
 
       {toast && <div id="toast" onClick={() => { const t = toast; setToast(null); t.onClick(); }}>{toast.text}</div>}
+
+      {menuOpen && <ParentMenu onClose={() => setMenuOpen(false)} />}
     </div>
   );
 }

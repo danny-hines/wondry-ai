@@ -15,7 +15,12 @@ import admin from './routes/admin.js';
 import tts from './routes/tts.js';
 import presence from './routes/presence.js';
 import wake from './routes/wake.js';
+import kiosk, { isManaged } from './routes/kiosk.js';
 import { ttsAvailable, ensureServer } from './services/tts.js';
+
+// Changes on every process start; the kiosk's parent menu watches this to know the
+// server has restarted (e.g. after a self-update) so it can reload onto new code.
+const BOOT_ID = Date.now();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 initSchema();
@@ -29,10 +34,11 @@ app.use('/api', profiles);
 app.use('/api', tts);
 app.use('/api', presence);
 app.use('/api', wake);
+app.use('/api', kiosk);
 app.use('/api/admin', admin);
 
 app.get('/api/health', (req, res) =>
-  res.json({ ok: true, liveGeneration: liveGenerationEnabled(), tts: ttsAvailable() }));
+  res.json({ ok: true, boot: BOOT_ID, managed: isManaged(), liveGeneration: liveGenerationEnabled(), tts: ttsAvailable() }));
 
 // Serve the built React app (client/dist) with SPA history fallback so a reload on
 // /admin/pages etc. still loads the app. /api and /ws are excluded. In dev the

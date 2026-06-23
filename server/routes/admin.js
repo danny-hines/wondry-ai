@@ -1,7 +1,7 @@
 // Parental/admin portal API. Password-gated.
 import express from 'express';
 import fs from 'node:fs';
-import { db, uid, now, setKV, setAudience, audienceFor, readingSummary, usageSince, usageByModel, costByArtifact } from '../db.js';
+import { db, uid, now, getKV, setKV, setAudience, audienceFor, readingSummary, usageSince, usageByModel, costByArtifact } from '../db.js';
 import { ADMIN_PASSWORD, getConfig, getRichness, liveGenerationEnabled } from '../config.js';
 import { selectedTierId, dailyCap } from '../services/richness.js';
 import { startGeneration, startReadingGeneration, createArtifact, getArtifact, artifactPath } from '../services/generator.js';
@@ -179,6 +179,7 @@ router.get('/config', (req, res) => {
     providers: Object.keys(cfg.providers),
     liveGeneration: liveGenerationEnabled(),
     wake: getWakeConfig(),
+    kioskPin: getKV('kiosk_pin', '0000'),
     richness: {
       selected: selectedTierId(),
       default: r.default || 'standard',
@@ -191,13 +192,14 @@ router.get('/config', (req, res) => {
 });
 
 router.post('/config', (req, res) => {
-  const { systemPrompt, chatSystemPrompt, readingSystemPrompt, richness, dailyCap: cap, wake } = req.body || {};
+  const { systemPrompt, chatSystemPrompt, readingSystemPrompt, richness, dailyCap: cap, wake, kioskPin } = req.body || {};
   if (typeof systemPrompt === 'string') setKV('artifact_system_prompt', systemPrompt);
   if (typeof chatSystemPrompt === 'string') setKV('chat_system_prompt', chatSystemPrompt);
   if (typeof readingSystemPrompt === 'string') setKV('reading_system_prompt', readingSystemPrompt);
   if (typeof richness === 'string' && (getRichness().tiers || {})[richness]) setKV('content_richness', richness);
   if (cap !== undefined && cap !== null && cap !== '') setKV('richness_daily_cap', String(Math.max(0, parseInt(cap, 10) || 0)));
   if (wake && typeof wake === 'object') setWakeConfig(wake);
+  if (typeof kioskPin === 'string' && /^\d{4}$/.test(kioskPin)) setKV('kiosk_pin', kioskPin);
   res.json({ ok: true });
 });
 

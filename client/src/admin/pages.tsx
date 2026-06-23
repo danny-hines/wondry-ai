@@ -343,9 +343,10 @@ export function Settings() {
   const [rich, setRich] = useState(''); const [cap, setCap] = useState('0'); const [richMsg, setRichMsg] = useState('');
   const [wake, setWake] = useState<{ enabled: boolean; phrase: string }>({ enabled: false, phrase: '' });
   const [wakeMsg, setWakeMsg] = useState('');
+  const [kioskPin, setKioskPin] = useState(''); const [pinMsg, setPinMsg] = useState('');
   const [types, setTypes] = useState<ContentTypeManifest[]>([]);
   const [usage, setUsage] = useState<UsageReport | null>(null);
-  useEffect(() => { api.config().then((cfg) => { setC(cfg); setCp(cfg.chatSystemPrompt); setSp(cfg.systemPrompt); setRp(cfg.readingSystemPrompt); setRich(cfg.richness.selected); setCap(String(cfg.richness.dailyCap || 0)); setWake({ enabled: cfg.wake.enabled, phrase: cfg.wake.phrase }); }).catch(() => {}); }, [api]);
+  useEffect(() => { api.config().then((cfg) => { setC(cfg); setCp(cfg.chatSystemPrompt); setSp(cfg.systemPrompt); setRp(cfg.readingSystemPrompt); setRich(cfg.richness.selected); setCap(String(cfg.richness.dailyCap || 0)); setWake({ enabled: cfg.wake.enabled, phrase: cfg.wake.phrase }); setKioskPin(cfg.kioskPin || '0000'); }).catch(() => {}); }, [api]);
   useEffect(() => { api.contentTypes().then((d) => setTypes(d.types)).catch(() => {}); api.usage().then(setUsage).catch(() => {}); }, [api]);
   const toggleType = async (t: ContentTypeManifest) => { await api.setContentTypeEnabled(t.id, !t.enabled); setTypes((ts) => ts.map((x) => x.id === t.id ? { ...x, enabled: !x.enabled } : x)); };
   if (!c) return <p className="muted">Loading…</p>;
@@ -395,6 +396,18 @@ export function Settings() {
         <div className="row" style={{ marginTop: 12 }}>
           <button className="act" onClick={async () => { await api.saveConfig({ richness: rich, dailyCap: Number(cap) || 0 }); setRichMsg('Saved ✓'); }}>Save</button>
           <span className="muted">{richMsg}</span>
+        </div>
+      </div>
+      <div className="card">
+        <h3 style={{ marginBottom: 6 }}>Kiosk access PIN</h3>
+        <p className="muted" style={{ marginBottom: 10 }}>On the kiosk, press and hold the avatar for 5 seconds to open a parent menu (Update &amp; Reload). This 4-digit PIN unlocks it. Low-stakes — it just keeps kids out of the maintenance menu. Default is <code>0000</code>.</p>
+        <div><label>4-digit PIN</label>
+          <input value={kioskPin} inputMode="numeric" maxLength={4} placeholder="0000"
+            onChange={(e) => { setKioskPin(e.target.value.replace(/\D/g, '').slice(0, 4)); setPinMsg(''); }} style={{ display: 'block', width: 120, letterSpacing: '0.3em', fontSize: '1.1rem' }} /></div>
+        <div className="row" style={{ marginTop: 12 }}>
+          <button className="act" disabled={!/^\d{4}$/.test(kioskPin)}
+            onClick={async () => { await api.saveConfig({ kioskPin }); setPinMsg('Saved ✓'); }}>Save</button>
+          <span className="muted">{/^\d{4}$/.test(kioskPin) ? pinMsg : 'Enter exactly 4 digits'}</span>
         </div>
       </div>
       <div className="card">

@@ -300,3 +300,44 @@
 .mcard.matched:hover { transform: none; }
 
 @media (prefers-reduced-motion: reduce) { #left, #avatarWrap, #convo, .artcard, .bubble, .artcard .fill { transition: none !important; animation: none !important; } }
+
+/* ── Parent menu overlay (press-and-hold the avatar) ──────────────────────── */
+.pm-overlay { position: absolute; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center;
+  background: rgba(8, 12, 20, .55); backdrop-filter: blur(6px); animation: rise .2s ease both; }
+.pm-card { position: relative; width: min(92%, 360px); background: var(--card-bg, #fff); color: var(--fg, #1f2430);
+  border-radius: 22px; padding: 26px 24px 22px; box-shadow: 0 24px 60px rgba(0,0,0,.4); text-align: center; }
+.pm-card h2 { margin: 0 0 14px; font-size: 1.35rem; }
+.pm-card p { color: var(--muted, #94a3b8); margin: 0; }
+.pm-x { position: absolute; top: 12px; right: 14px; border: none; background: transparent; color: var(--muted, #94a3b8);
+  font-size: 1.3rem; cursor: pointer; line-height: 1; padding: 4px; }
+.pm-shake { animation: pm-shake .42s ease both; }
+@keyframes pm-shake { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-9px)} 40%,80%{transform:translateX(9px)} }
+
+.pm-dots { display: flex; gap: 16px; justify-content: center; margin: 6px 0 20px; }
+.pm-dots span { width: 15px; height: 15px; border-radius: 50%; background: color-mix(in srgb, var(--user, #16b8a6) 22%, transparent);
+  border: 2px solid color-mix(in srgb, var(--user, #16b8a6) 45%, transparent); transition: background-color .15s; }
+.pm-dots span.on { background: var(--user, #16b8a6); border-color: var(--user, #16b8a6); }
+
+.pm-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 0 auto; max-width: 280px; }
+.pm-pad button { font: inherit; font-size: 1.5rem; font-weight: 700; aspect-ratio: 1; border: none; border-radius: 50%; cursor: pointer;
+  background: color-mix(in srgb, var(--user, #16b8a6) 12%, var(--card-bg, #fff)); color: var(--fg, #1f2430); transition: transform .1s, background-color .15s; }
+.pm-pad button:active { transform: scale(.94); background: color-mix(in srgb, var(--user, #16b8a6) 26%, var(--card-bg, #fff)); }
+.pm-pad .pm-back { font-size: 1.25rem; }
+.pm-hint { margin-top: 18px; font-size: .82rem; }
+
+.pm-menu { display: flex; flex-direction: column; gap: 12px; }
+.pm-act { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; text-align: left;
+  font: inherit; border: none; border-radius: 16px; cursor: pointer; padding: 14px 18px;
+  background: var(--user, #16b8a6); color: var(--user-fg, #fff); transition: transform .1s, opacity .15s; }
+.pm-act b { font-size: 1.1rem; font-weight: 800; }
+.pm-act small { opacity: .85; font-weight: 600; }
+.pm-act:active { transform: scale(.98); }
+.pm-act:disabled { opacity: .45; cursor: default; }
+.pm-act.pm-solo { display: inline-block; width: auto; text-align: center; margin-top: 16px; padding: 12px 28px; }
+
+.pm-busy { padding-top: 30px; }
+.pm-spinner { width: 46px; height: 46px; margin: 0 auto 18px; border-radius: 50%;
+  border: 5px solid color-mix(in srgb, var(--user, #16b8a6) 22%, transparent); border-top-color: var(--user, #16b8a6); animation: pm-spin 1s linear infinite; }
+@keyframes pm-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) { .pm-overlay, .pm-shake, .pm-spinner { animation: none !important; } }

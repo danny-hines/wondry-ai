@@ -20,6 +20,14 @@ export const ttsArrayBuffer = async (text: string, profileId?: string, voice?: s
 };
 export const getVoices = () => fetch('/api/voices').then(j<{ voices: string[]; available: boolean; browserVoice?: string }>).catch(() => ({ voices: [] as string[], available: false, browserVoice: undefined }));
 
+// ----- kiosk parent controls (PIN-gated update/reload from the touchscreen) -----
+export const getHealth = () => fetch('/api/health').then(j<{ ok: boolean; boot?: number; managed?: boolean; liveGeneration?: boolean; tts?: boolean }>);
+export const kioskVerifyPin = (pin: string) =>
+  fetch('/api/kiosk/verify', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin }) }).then(j<{ ok: boolean; managed: boolean }>);
+export const kioskUpdate = (pin: string) =>
+  fetch('/api/kiosk/update', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin }) })
+    .then(j<{ status: 'up-to-date' | 'updating' | 'unmanaged' | 'bad-pin' | 'error'; rev?: string; error?: string }>);
+
 // ----- structured content (kiosk: reading, flashcards, games, …) -----
 export const getContent = <T = unknown>(id: string) => fetch(`/api/content/${id}`).then(j<T>);
 export const getContentTypes = () => fetch('/api/content-types').then(j<{ types: ContentTypeManifest[] }>).catch(() => ({ types: [] as ContentTypeManifest[] }));
@@ -44,7 +52,7 @@ export class AdminApi {
   private req(path: string, opts: RequestInit = {}) { return fetch('/api/admin' + path, { ...opts, headers: { ...this.h(), ...(opts.headers || {}) } }); }
   async ok(): Promise<boolean> { return (await this.req('/config')).ok; }
   config = () => this.req('/config').then(j<AdminConfig>);
-  saveConfig = (body: { systemPrompt?: string; chatSystemPrompt?: string; readingSystemPrompt?: string; richness?: string; dailyCap?: number; wake?: { enabled?: boolean; phrase?: string } }) => this.req('/config', { method: 'POST', body: JSON.stringify(body) });
+  saveConfig = (body: { systemPrompt?: string; chatSystemPrompt?: string; readingSystemPrompt?: string; richness?: string; dailyCap?: number; wake?: { enabled?: boolean; phrase?: string }; kioskPin?: string }) => this.req('/config', { method: 'POST', body: JSON.stringify(body) });
   log = () => this.req('/log').then(j<{ messages: LogMessage[]; safety: SafetyEntry[] }>);
   artifacts = () => this.req('/artifacts').then(j<{ artifacts: Artifact[]; kids: Profile[] }>);
   setAudience = (id: string, profileId: string, on: boolean) => this.req(`/artifacts/${id}/audience`, { method: 'POST', body: JSON.stringify({ profileId, on }) });

@@ -262,6 +262,14 @@ wondry update     # git pull (keeps local config edits) → rebuild → restart 
 but `wondry update` is the lightweight path — it skips the apt/Node/prompt steps.) Local edits to tracked
 files like `config.json` are auto-stashed across the pull, so your provider/routing tweaks survive updates.
 
+**Update from the kiosk (no SSH):** press and hold the avatar for 5 seconds to open a parent menu,
+enter the 4-digit PIN (default `0000`, change it in the parent console → **Settings → Kiosk access PIN**),
+and pick **Update** or **Reload**. Update does the same `git pull` + rebuild as `wondry update`, then the
+server self-exits and systemd (`Restart=always`) relaunches it on the new code — the kiosk watches
+`/api/health` and reloads itself once it's back (or shows "Already up to date"). The menu only offers
+Update when running as the installed service (detected via systemd's `INVOCATION_ID`), so a local
+`npm start` shows Reload only. The PIN is low-stakes by design — it just keeps kids out of the menu.
+
 ## Known gaps / next steps (deferred by design)
 - Hardware adapters above need validation on real Pi hardware (built + unit-tested, but not run on a Pi).
 - Proactive nightly generation + interest model (reuses the authoring→review→publish pipeline).
