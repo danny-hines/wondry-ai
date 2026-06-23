@@ -93,10 +93,12 @@ function serverEngine(): SttEngine {
         navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
           const chunks: BlobPart[] = [];
           const mr = new MediaRecorder(stream);
-          let done = false;
+          let done = false, raf = 0;
+          let ctx: AudioContext | null = null;
           const finish = async () => {
             if (done) return; done = true;
             clearTimeout(timer);
+            cancelAnimationFrame(raf); try { ctx?.close(); } catch {}
             try { mr.stop(); } catch {}
             stream.getTracks().forEach((t) => t.stop());
             const blob = new Blob(chunks, { type: mr.mimeType || 'audio/webm' });
@@ -107,6 +109,35 @@ function serverEngine(): SttEngine {
           mr.onstop = () => { void finish(); };
           stop = () => { try { mr.stop(); } catch {} };
           const timer = setTimeout(() => { try { mr.stop(); } catch {} }, maxMs);
+
+          // Voice-activity auto-stop: end ~SILENCE_MS after the child stops talking
+          // (once we've heard speech) instead of waiting out the whole window. The
+          // maxMs cap and tap-to-stop still apply. Tune SILENCE_MS to taste.
+          try {
+            ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const node = ctx.createMediaStreamSource(stream);
+            const analyser = ctx.createAnalyser(); analyser.fftSize = 1024;
+            node.connect(analyser);
+            const data = new Uint8Array(analyser.fftSize);
+            const QUIET = 0.025;      // RMS below this counts as silence
+            const SILENCE_MS = 900;   // trailing silence before we stop
+            const MIN_MS = 500;       // give them a beat to start before arming
+            let heard = false, quietAt = 0;
+            const t0 = performance.now();
+            const tick = () => {
+              analyser.getByteTimeDomainData(data);
+              let sum = 0; for (let k = 0; k < data.length; k++) { const v = (data[k] - 128) / 128; sum += v * v; }
+              const rms = Math.sqrt(sum / data.length), now = performance.now();
+              if (rms > QUIET) { heard = true; quietAt = 0; }
+              else if (heard && now - t0 > MIN_MS) {
+                if (!quietAt) quietAt = now;
+                else if (now - quietAt > SILENCE_MS) { try { mr.stop(); } catch {} return; }
+              }
+              raf = requestAnimationFrame(tick);
+            };
+            raf = requestAnimationFrame(tick);
+          } catch { /* no AudioContext → fall back to maxMs / tap-to-stop */ }
+
           mr.start();
         }).catch(() => resolve({ transcript: '', backend: 'server' }));
       });
