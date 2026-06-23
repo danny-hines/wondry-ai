@@ -7,6 +7,12 @@
 .admin nav a { font: inherit; font-weight: 600; padding: 10px 16px; cursor: pointer; color: #6b7280; border-bottom: 3px solid transparent; text-decoration: none; }
 .admin nav a.active { color: #4f46e5; border-bottom-color: #4f46e5; }
 .admin main { padding: 22px; max-width: 1000px; margin: 0 auto; }
+/* Sub-tabs within a page (e.g. Settings groups) — a pill row, visually subordinate
+   to the main underline nav above. */
+.subnav { display: inline-flex; gap: 3px; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 4px; margin-bottom: 16px; flex-wrap: wrap; }
+.subnav button { font: inherit; font-weight: 600; font-size: .9rem; border: none; background: transparent; color: #6b7280; padding: 7px 15px; border-radius: 7px; cursor: pointer; transition: background-color .12s, color .12s; }
+.subnav button:not(.on):hover { background: #f3f4f6; color: #374151; }
+.subnav button.on { background: #4f46e5; color: #fff; }
 .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin-bottom: 12px; }
 .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .msg { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px solid #f1f1f4; align-items: baseline; }

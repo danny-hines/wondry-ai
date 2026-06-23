@@ -335,6 +335,9 @@ export function Reading() {
   );
 }
 
+type SettingsTab = 'general' | 'content' | 'kiosk' | 'prompts';
+const SETTINGS_TABS: [SettingsTab, string][] = [['general', 'General'], ['content', 'Content'], ['kiosk', 'Kiosk & device'], ['prompts', 'AI prompts']];
+
 export function Settings() {
   const api = useAdmin();
   const [c, setC] = useState<AdminConfig | null>(null);
@@ -346,6 +349,8 @@ export function Settings() {
   const [kioskPin, setKioskPin] = useState(''); const [pinMsg, setPinMsg] = useState('');
   const [types, setTypes] = useState<ContentTypeManifest[]>([]);
   const [usage, setUsage] = useState<UsageReport | null>(null);
+  const [tab, setTab] = useState<SettingsTab>(() => (sessionStorage.getItem('imag_settings_tab') as SettingsTab) || 'general');
+  const pickTab = (t: SettingsTab) => { setTab(t); sessionStorage.setItem('imag_settings_tab', t); };
   useEffect(() => { api.config().then((cfg) => { setC(cfg); setCp(cfg.chatSystemPrompt); setSp(cfg.systemPrompt); setRp(cfg.readingSystemPrompt); setRich(cfg.richness.selected); setCap(String(cfg.richness.dailyCap || 0)); setWake({ enabled: cfg.wake.enabled, phrase: cfg.wake.phrase }); setKioskPin(cfg.kioskPin || '0000'); }).catch(() => {}); }, [api]);
   useEffect(() => { api.contentTypes().then((d) => setTypes(d.types)).catch(() => {}); api.usage().then(setUsage).catch(() => {}); }, [api]);
   const toggleType = async (t: ContentTypeManifest) => { await api.setContentTypeEnabled(t.id, !t.enabled); setTypes((ts) => ts.map((x) => x.id === t.id ? { ...x, enabled: !x.enabled } : x)); };
@@ -353,6 +358,13 @@ export function Settings() {
   const selTier = c.richness.tiers.find((t) => t.id === rich);
   return (
     <>
+      <div className="subnav">
+        {SETTINGS_TABS.map(([id, label]) => (
+          <button key={id} className={tab === id ? 'on' : ''} onClick={() => pickTab(id)}>{label}</button>
+        ))}
+      </div>
+
+      {tab === 'general' && <>
       <div className="card">
         <h3 style={{ marginBottom: 6 }}>Generation</h3>
         <p className="muted">Currently: <b>{c.liveGeneration ? 'LIVE — using Claude' : 'MOCK — set ANTHROPIC_API_KEY to go live'}</b>. Per-task routing (edit in config.json):</p>
@@ -378,6 +390,9 @@ export function Settings() {
           </div>}
         </> : <p className="muted">No usage recorded yet (or running on the mock provider — mock generation is free).</p>}
       </div>
+      </>}
+
+      {tab === 'content' && <>
       <div className="card">
         <h3 style={{ marginBottom: 6 }}>Content richness</h3>
         <p className="muted" style={{ marginBottom: 10 }}>How rich and interactive the pages generated for your kids are. Richer tiers use a more capable model and a bigger token budget — better visuals, but slower and more costly per page. (Parents can override this per page when creating one.)</p>
@@ -399,6 +414,19 @@ export function Settings() {
         </div>
       </div>
       <div className="card">
+        <h3 style={{ marginBottom: 6 }}>Content types</h3>
+        <p className="muted" style={{ marginBottom: 10 }}>Turn kinds of content on or off everywhere. The capability tags show what each type uses. Per-child controls are under Kids.</p>
+        {types.map((t) => (
+          <div className="row" key={t.id} style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
+            <span>{t.emoji} <b>{t.label}</b> <span className="muted">· {t.renderer}{t.uses.mic ? ' · mic' : ''}{t.uses.media ? ' · media' : ''}</span></span>
+            <button className={`chip ${t.enabled ? 'on' : ''}`} onClick={() => toggleType(t)}>{t.enabled ? 'On' : 'Off'}</button>
+          </div>
+        ))}
+      </div>
+      </>}
+
+      {tab === 'kiosk' && <>
+      <div className="card">
         <h3 style={{ marginBottom: 6 }}>Kiosk access PIN</h3>
         <p className="muted" style={{ marginBottom: 10 }}>On the kiosk, press and hold the avatar for 5 seconds to open a parent menu (Update &amp; Reload). This 4-digit PIN unlocks it. Low-stakes — it just keeps kids out of the maintenance menu. Default is <code>0000</code>.</p>
         <div><label>4-digit PIN</label>
@@ -409,16 +437,6 @@ export function Settings() {
             onClick={async () => { await api.saveConfig({ kioskPin }); setPinMsg('Saved ✓'); }}>Save</button>
           <span className="muted">{/^\d{4}$/.test(kioskPin) ? pinMsg : 'Enter exactly 4 digits'}</span>
         </div>
-      </div>
-      <div className="card">
-        <h3 style={{ marginBottom: 6 }}>Content types</h3>
-        <p className="muted" style={{ marginBottom: 10 }}>Turn kinds of content on or off everywhere. The capability tags show what each type uses. Per-child controls are under Kids.</p>
-        {types.map((t) => (
-          <div className="row" key={t.id} style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
-            <span>{t.emoji} <b>{t.label}</b> <span className="muted">· {t.renderer}{t.uses.mic ? ' · mic' : ''}{t.uses.media ? ' · media' : ''}</span></span>
-            <button className={`chip ${t.enabled ? 'on' : ''}`} onClick={() => toggleType(t)}>{t.enabled ? 'On' : 'Off'}</button>
-          </div>
-        ))}
       </div>
       <div className="card">
         <h3 style={{ marginBottom: 6 }}>Wake word (hands-free)</h3>
@@ -435,6 +453,9 @@ export function Settings() {
           <span className="muted">{wakeMsg}</span>
         </div>
       </div>
+      </>}
+
+      {tab === 'prompts' && <>
       <div className="card">
         <h3 style={{ marginBottom: 6 }}>Chat personality &amp; safety</h3>
         <p className="muted" style={{ marginBottom: 10 }}>How the avatar talks to your kids and handles tricky or inappropriate questions. Read aloud, so keep it spoken-style.</p>
@@ -465,6 +486,7 @@ export function Settings() {
           <span className="muted">{rpMsg}</span>
         </div>
       </div>
+      </>}
     </>
   );
 }
