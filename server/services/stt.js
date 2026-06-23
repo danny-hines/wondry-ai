@@ -38,26 +38,43 @@ async function transcribeHttp(buf, mime) {
   return { text: String(j.text || '').trim() };
 }
 
-function transcribeCli(buf, mime) {
+// Spawn a process, capturing stderr; resolves { code, err } on close (never
+// rejects on non-zero exit — callers decide what a bad code means), rejects only
+// if the binary can't be spawned at all.
+function runProc(file, args) {
   return new Promise((resolve, reject) => {
-    const tmp = path.join(os.tmpdir(), `wstt-${Date.now()}-${Math.random().toString(36).slice(2)}${extFor(mime)}`);
-    const outBase = tmp + '.out';
-    const cleanup = () => { for (const f of [tmp, outBase + '.txt']) { try { fs.rmSync(f, { force: true }); } catch {} } };
-    try { fs.writeFileSync(tmp, buf); } catch (e) { return reject(e); }
-    const cmd = process.env.WHISPER_CMD.trim().split(/\s+/);
-    // whisper-cli -m <model> -f <audio> -nt -otxt -of <outBase>  -> writes <outBase>.txt
-    const args = [...cmd.slice(1), '-m', process.env.WHISPER_MODEL, '-f', tmp, '-nt', '-otxt', '-of', outBase];
     let err = '', proc;
-    try { proc = spawn(cmd[0], args, { stdio: ['ignore', 'ignore', 'pipe'] }); }
-    catch (e) { cleanup(); return reject(e); }
+    try { proc = spawn(file, args, { stdio: ['ignore', 'ignore', 'pipe'] }); }
+    catch (e) { return reject(e); }
     proc.stderr.on('data', (d) => { err += d; });
-    proc.on('error', (e) => { cleanup(); reject(e); });
-    proc.on('close', (code) => {
-      let text = '';
-      try { text = fs.readFileSync(outBase + '.txt', 'utf8').trim(); } catch {}
-      cleanup();
-      if (code !== 0 && !text) return reject(new Error(`whisper exit ${code}: ${err.slice(0, 200)}`));
-      resolve({ text });
-    });
+    proc.on('error', reject);
+    proc.on('close', (code) => resolve({ code, err }));
   });
+}
+
+const FFMPEG = process.env.FFMPEG_CMD || 'ffmpeg';
+
+async function transcribeCli(buf, mime) {
+  const stamp = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const inFile = path.join(os.tmpdir(), `wstt-${stamp}${extFor(mime)}`);
+  const wavFile = path.join(os.tmpdir(), `wstt-${stamp}.wav`);
+  const outBase = path.join(os.tmpdir(), `wstt-${stamp}.out`);
+  const cleanup = () => { for (const f of [inFile, wavFile, outBase + '.txt']) { try { fs.rmSync(f, { force: true }); } catch {} } };
+  try {
+    fs.writeFileSync(inFile, buf);
+    // 1. Transcode whatever the browser sent (webm/opus, ogg, mp4…) to 16 kHz mono
+    //    WAV — whisper.cpp's bundled miniaudio decoder only reads WAV/FLAC/MP3.
+    const ff = await runProc(FFMPEG, ['-nostdin', '-loglevel', 'error', '-y', '-i', inFile, '-ar', '16000', '-ac', '1', '-f', 'wav', wavFile]);
+    if (ff.code !== 0) throw new Error(`ffmpeg exit ${ff.code}: ${ff.err.slice(0, 200)}`);
+    // 2. whisper-cli -m <model> -f <wav> -nt -otxt -of <outBase>  -> writes <outBase>.txt
+    const cmd = process.env.WHISPER_CMD.trim().split(/\s+/);
+    const args = [...cmd.slice(1), '-m', process.env.WHISPER_MODEL, '-f', wavFile, '-nt', '-otxt', '-of', outBase];
+    const w = await runProc(cmd[0], args);
+    let text = '';
+    try { text = fs.readFileSync(outBase + '.txt', 'utf8').trim(); } catch {}
+    if (w.code !== 0 && !text) throw new Error(`whisper exit ${w.code}: ${w.err.slice(0, 200)}`);
+    return { text };
+  } finally {
+    cleanup();
+  }
 }

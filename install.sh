@@ -196,7 +196,9 @@ fi
 # below, /api/stt returns empty ("didn't catch that") — install it to transcribe.
 KIOSK_URL="http://localhost:${PORT}/?stt=server"
 if confirm "Install whisper.cpp for on-device speech-to-text? (compiles — several minutes)" n; then
-  sudo apt-get install -y -qq build-essential cmake >/dev/null
+  # ffmpeg transcodes the browser's audio (webm/opus) to 16 kHz mono WAV for
+  # whisper — whisper.cpp's built-in decoder only handles WAV/FLAC/MP3.
+  sudo apt-get install -y -qq build-essential cmake ffmpeg >/dev/null
   if [ ! -x "$WHISPER_DIR/build/bin/whisper-cli" ]; then
     say "Building whisper.cpp in $WHISPER_DIR…"
     [ -d "$WHISPER_DIR/.git" ] || git clone --depth 1 https://github.com/ggerganov/whisper.cpp "$WHISPER_DIR"
