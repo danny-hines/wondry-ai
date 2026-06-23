@@ -59,8 +59,20 @@ need_sudo
 say "Wondry installer → $INSTALL_DIR"
 case "$(uname -m)" in aarch64|arm64) ;; *) warn "Not arm64 ($(uname -m)) — should still work, but the Pi/Hailo path expects 64-bit." ;; esac
 
+# Prime sudo up front (clear prompt, not a mid-run surprise) and keep the
+# session warm so long steps don't re-prompt. Reads the password from the tty
+# even under `curl | bash`.
+if ! sudo -n true 2>/dev/null; then
+  say "This needs administrator rights for a few steps. Enter your password for '$USER':"
+  sudo -v </dev/tty || die "Could not get sudo — re-run and enter your password."
+fi
+( while kill -0 "$$" 2>/dev/null; do sudo -n true 2>/dev/null; sleep 50; done ) &
+SUDO_KEEPALIVE=$!
+trap 'kill "$SUDO_KEEPALIVE" 2>/dev/null || true' EXIT
+ok "Administrator access granted"
+
 # ---- 1. system packages ----------------------------------------------------
-say "Installing system packages…"
+say "Installing system packages… (downloading; can take a minute or two on a Pi)"
 sudo apt-get update -qq
 sudo apt-get install -y -qq git curl ca-certificates unclutter >/dev/null
 # chromium is 'chromium-browser' on Pi OS, 'chromium' elsewhere
