@@ -213,65 +213,62 @@ ENV
   ok "whisper.cpp wired up (kiosk will use on-device STT)"
 fi
 
-# ---- 9. kiosk autostart -----------------------------------------------------
-# Pi OS Desktop already runs a Wayland compositor (labwc on Pi 5, wayfire on Pi 4)
-# — hook its autostart. Pi OS Lite has no desktop, so install `cage` (a one-app
-# Wayland kiosk compositor) and boot straight into it on the console (tty1).
+# ---- 9. kiosk autostart (X11: autologin → startx -nocursor → Openbox → Chromium)
+# Pi OS Lite has no display server. Install a minimal X11 kiosk stack and boot
+# straight into full-screen Chromium on tty1. `startx -- -nocursor` disables the
+# mouse pointer at the X-server level (cage/Wayland has no equivalent), and
+# unclutter hides it after any movement. Targets Pi OS Lite (64-bit).
 say "Setting up the full-screen kiosk on boot…"
-KIOSK_CMD="env WONDRY_URL='${KIOSK_URL}' bash '${INSTALL_DIR}/tools/kiosk.sh'"
-compositor=""
-if pgrep -x labwc >/dev/null 2>&1 || command -v labwc >/dev/null 2>&1; then compositor=labwc
-elif pgrep -x wayfire >/dev/null 2>&1 || command -v wayfire >/dev/null 2>&1; then compositor=wayfire; fi
-case "$compositor" in
-  labwc)
-    mkdir -p "$HOME/.config/labwc"; AF="$HOME/.config/labwc/autostart"; touch "$AF"
-    grep -qF "$INSTALL_DIR/tools/kiosk.sh" "$AF" || echo "$KIOSK_CMD &" >> "$AF"
-    ok "Kiosk autostart added (labwc)";;
-  wayfire)
-    INI="$HOME/.config/wayfire.ini"; mkdir -p "$HOME/.config"; touch "$INI"
-    grep -q '^\[autostart\]' "$INI" || printf '\n[autostart]\n' >> "$INI"
-    grep -qF "$INSTALL_DIR/tools/kiosk.sh" "$INI" || sed -i "/^\[autostart\]/a wondry = ${KIOSK_CMD}" "$INI"
-    ok "Kiosk autostart added (wayfire)";;
-  *)
-    # --- Pi OS Lite: no desktop. Build a minimal cage kiosk on tty1. ---
-    say "No desktop found — setting up a minimal kiosk (cage) for Pi OS Lite…"
-    # cage = single-app Wayland kiosk; pipewire/wireplumber = the audio server
-    # Chromium needs to reach the mic (getUserMedia) and play TTS. Pi OS Lite
-    # ships neither, so the USB mic is invisible to the browser without these.
-    spin "Installing kiosk + audio (cage, pipewire)" \
-      sudo apt-get install -y -qq cage pipewire pipewire-pulse wireplumber
-    # cage needs DRM/input access; the default Pi user usually has these already.
-    sudo usermod -aG video,render,input,audio "$USER" 2>/dev/null || true
-    # PipeWire runs as the logged-in user; make sure its services come up in the
-    # tty1 session (the packages enable these by default, but be explicit).
-    systemctl --user enable pipewire pipewire-pulse wireplumber >/dev/null 2>&1 || true
+# X11 kiosk stack + the audio server Chromium needs for the mic (getUserMedia)
+# and TTS playback. Pi OS Lite ships none of these.
+spin "Installing kiosk stack (Xorg, Openbox, audio)" \
+  sudo apt-get install -y --no-install-recommends \
+    xserver-xorg xinit x11-xserver-utils openbox unclutter \
+    pipewire pipewire-pulse wireplumber
+sudo usermod -aG video,render,input,audio,tty "$USER" 2>/dev/null || true
+# PipeWire runs as the logged-in user; ensure its services come up in the session.
+systemctl --user enable pipewire pipewire-pulse wireplumber >/dev/null 2>&1 || true
 
-    # Auto-login the console so a session exists to launch the kiosk from
-    # (identical to raspi-config's "Console Autologin").
-    sudo mkdir -p /etc/systemd/system/getty@tty1.service.d
-    sudo tee /etc/systemd/system/getty@tty1.service.d/autologin.conf >/dev/null <<UNIT
+# Console autologin on tty1 so a session exists to start X from
+# (identical to raspi-config's "Console Autologin").
+sudo mkdir -p /etc/systemd/system/getty@tty1.service.d
+sudo tee /etc/systemd/system/getty@tty1.service.d/autologin.conf >/dev/null <<UNIT
 [Service]
 ExecStart=
 ExecStart=-/sbin/agetty --autologin ${USER} --noclear %I \$TERM
 UNIT
-    sudo systemctl daemon-reload
+sudo systemctl daemon-reload
 
-    # Launch cage from the tty1 login shell — only on the physical console, and
-    # only when no graphical session is already running. cage exiting (browser
-    # closed/crashed) ends the login, getty respawns, and it relaunches.
-    PROFILE="$HOME/.bash_profile"
-    [ -f "$PROFILE" ] || printf '[ -f ~/.profile ] && . ~/.profile\n' > "$PROFILE"
-    if ! grep -qF 'WONDRY KIOSK' "$PROFILE"; then
-      cat >> "$PROFILE" <<KIOSK
+# Start X on the physical console (tty1) only; -nocursor kills the pointer.
+PROFILE="$HOME/.bash_profile"
+[ -f "$PROFILE" ] || printf '[ -f ~/.profile ] && . ~/.profile\n' > "$PROFILE"
+# Strip any previous kiosk block first so upgrades (e.g. cage → X11) replace it.
+sed -i '/# --- WONDRY KIOSK/,/# --- end WONDRY KIOSK ---/d' "$PROFILE"
+cat >> "$PROFILE" <<'KIOSK'
 # --- WONDRY KIOSK (added by install.sh) ---
-if [ "\$(tty)" = "/dev/tty1" ] && [ -z "\${WAYLAND_DISPLAY:-}" ] && [ -z "\${DISPLAY:-}" ]; then
-  exec env WONDRY_URL='${KIOSK_URL}' cage -- bash '${INSTALL_DIR}/tools/kiosk.sh'
+if [ -z "${DISPLAY:-}" ] && [ "${XDG_VTNR:-0}" -eq 1 ]; then
+  exec startx -- -nocursor
 fi
 # --- end WONDRY KIOSK ---
 KIOSK
-    fi
-    ok "Kiosk set up (cage on tty1) — starts on next boot.";;
-esac
+
+# .xinitrc → Openbox; Openbox autostart → screen-blanking off + a Chromium kiosk
+# relaunch loop (kiosk.sh waits for the server's health endpoint, then execs it).
+printf 'exec openbox-session\n' > "$HOME/.xinitrc"
+mkdir -p "$HOME/.config/openbox"
+cat > "$HOME/.config/openbox/autostart" <<AUTO
+# never blank/sleep the kiosk screen
+xset s off -dpms s noblank &
+
+# run the Chromium kiosk forever — relaunch if it ever crashes
+(
+  while true; do
+    env WONDRY_URL='${KIOSK_URL}' bash '${INSTALL_DIR}/tools/kiosk.sh'
+    sleep 2
+  done
+) &
+AUTO
+ok "Kiosk set up (X11/Openbox on tty1) — starts on next boot."
 
 # ---- done ------------------------------------------------------------------
 IP="$(hostname -I 2>/dev/null | awk '{print $1}')"

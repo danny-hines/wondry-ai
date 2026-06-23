@@ -209,7 +209,7 @@ tools/
 
 ## Deploy on the Raspberry Pi
 
-One command on a fresh **Raspberry Pi OS (Bookworm)** — SSH in and run:
+One command on a fresh **Raspberry Pi OS Lite (Bookworm, 64-bit)** — SSH in and run:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/danny-hines/wondry-ai/main/install.sh | bash
@@ -217,7 +217,8 @@ curl -fsSL https://raw.githubusercontent.com/danny-hines/wondry-ai/main/install.
 
 `install.sh` installs Node 22, clones + builds the app, walks you through the `.env` (API key, parent
 password, port), runs the server as a **systemd service**, sets up the **full-screen kiosk on boot**
-(Wayland labwc/wayfire), and prompts to install **Piper** (TTS) and **whisper.cpp** (STT). It's
+(a minimal X11 stack — Xorg + Openbox + Chromium, autologin → `startx -- -nocursor`, no desktop), and
+prompts to install **Piper** (TTS) and **whisper.cpp** (STT). It's
 **idempotent** — re-run it any time to update (it does `git pull` + rebuild). For an unattended install,
 pass secrets as env vars: `curl -fsSL …/install.sh | ANTHROPIC_API_KEY=sk-… ADMIN_PASSWORD=… bash`.
 (Prefer to read before you run? `git clone` the repo and run `./install.sh` from the checkout.)
