@@ -1,0 +1,27 @@
+{
+  "name": "wondry",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Educational AI agent for kids — Raspberry Pi kiosk + on-the-fly interactive artifact generation.",
+  "license": "MIT",
+  "type": "module",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node --experimental-sqlite server/index.js",
+    "seed": "node --experimental-sqlite server/seed.js",
+    "test": "node --experimental-sqlite --test",
+    "verify": "bash tools/verify.sh",
+    "setup-piper": "node tools/setup-piper.mjs",
+    "dev": "concurrently -k -n server,client \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "node --experimental-sqlite --watch server/index.js",
+    "dev:client": "npm --prefix client run dev",
+    "build": "npm --prefix client install --no-audit --no-fund && npm --prefix client run build"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1"
+  }
+}

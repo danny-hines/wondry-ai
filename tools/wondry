@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Wondry management CLI. install.sh symlinks this to /usr/local/bin/wondry, so on
+# the Pi you can just run `wondry update`, `wondry logs`, etc. It finds its own
+# install directory by resolving the symlink, so it works wherever it was cloned.
+set -euo pipefail
+
+DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+SERVICE=wondry
+cd "$DIR"
+
+rebuild() {
+  npm install --no-fund --no-audit
+  npm run build
+  sudo systemctl restart "$SERVICE"
+}
+
+case "${1:-help}" in
+  update)
+    echo "Updating Wondry in $DIR…"
+    before="$(git rev-parse HEAD)"
+    # --autostash keeps any local edits (e.g. config.json) across the pull.
+    git pull --rebase --autostash
+    after="$(git rev-parse HEAD)"
+    if [ "$before" = "$after" ]; then
+      echo "Already up to date ($(git rev-parse --short HEAD)). Run 'wondry rebuild' to force a rebuild."
+      exit 0
+    fi
+    echo "Updated to $(git rev-parse --short HEAD) — rebuilding and restarting…"
+    rebuild
+    echo "Done. Now running: $(git log -1 --format='%h %s')"
+    ;;
+  rebuild) rebuild; echo "Rebuilt and restarted.";;
+  restart) sudo systemctl restart "$SERVICE"; echo "Restarted.";;
+  start)   sudo systemctl start "$SERVICE";   echo "Started.";;
+  stop)    sudo systemctl stop "$SERVICE";    echo "Stopped.";;
+  status)  systemctl status "$SERVICE" --no-pager || true;;
+  logs)    journalctl -u "$SERVICE" -f;;
+  version) git -C "$DIR" log -1 --format='%h %s (%cr)';;
+  url)
+    ip="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
+    port="$(grep -E '^PORT=' .env 2>/dev/null | cut -d= -f2 || true)"; port="${port:-8080}"
+    echo "Kiosk:   http://localhost:${port}/"
+    echo "Console: http://${ip:-<pi-ip>}:${port}/admin/"
+    ;;
+  *)
+    echo "Wondry — usage: wondry <command>"
+    echo "  update    pull the latest, rebuild, and restart (keeps local config edits)"
+    echo "  rebuild   reinstall deps + rebuild + restart (no pull)"
+    echo "  restart   restart the server service"
+    echo "  start | stop"
+    echo "  status    service status"
+    echo "  logs      follow the server logs"
+    echo "  version   the installed git revision"
+    echo "  url       the kiosk + parent-console URLs"
+    ;;
+esac

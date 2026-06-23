@@ -1,0 +1,286 @@
+/* Themeable surfaces. Light is the default; .theme-dark (set from the kid's profile)
+   overrides the same variables so every rule below stays theme-agnostic. */
+.kiosk-root {
+  --bg: #fff;            --fg: #1f2430;
+  --surface: #fafbfc;    --surface-border: #eef0f4;
+  --bubble-bg: #eef1f6;  --bubble-fg: #1f2430;
+  --input-bg: #fff;      --input-border: #e3e7ee;
+  --btn-bg: #e9edf3;     --btn-fg: #475569;     --btn-bg-hover: #dde3ec;
+  --card-bg: #fff;       --card-border: #e3e7ee;
+  --muted: #64748b;      --code-bg: rgba(0,0,0,.07);
+}
+.kiosk-root.theme-dark {
+  --bg: #16181d;         --fg: #e7e9ee;
+  --surface: #1b1e25;    --surface-border: #2a2e37;
+  --bubble-bg: #262a32;  --bubble-fg: #e7e9ee;
+  --input-bg: #1f232b;   --input-border: #353b45;
+  --btn-bg: #2a2e37;     --btn-fg: #cbd3df;     --btn-bg-hover: #333944;
+  --card-bg: #1f232b;    --card-border: #2f343d;
+  --muted: #97a2b2;      --code-bg: rgba(255,255,255,.12);
+}
+
+.kiosk-root { position: fixed; inset: 12px; background: var(--bg); border: 12px solid var(--user, #16b8a6);
+  border-radius: 26px; display: flex; overflow: hidden; transition: border-color .5s ease, background-color .4s ease, color .4s ease;
+  font-family: ui-rounded, "Segoe UI", system-ui, sans-serif; color: var(--fg); }
+
+#left { display: flex; align-items: center; justify-content: center; flex: 1; min-width: 0; gap: 18px; padding: 24px;
+  transition: flex-basis .5s cubic-bezier(.4,0,.2,1), flex-grow .5s cubic-bezier(.4,0,.2,1), padding .4s ease; will-change: flex-basis, flex-grow; }
+#avatarWrap { display: flex; align-items: center; justify-content: center; transition: transform .5s cubic-bezier(.4,0,.2,1); will-change: transform; transform: scale(1); }
+#avatarWrap canvas { width: 300px; height: 300px; }
+#convo { display: flex; flex-direction: column; min-width: 0; min-height: 0; width: 0; opacity: 0; overflow: hidden; transition: width .5s cubic-bezier(.4,0,.2,1), opacity .4s ease; }
+#bubbles { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 8px 6px; }
+
+.state-idle #avatarWrap { transform: scale(1.06); }
+.state-idle #convo { width: 0; opacity: 0; }
+.state-idle #right { display: none; }
+.state-conversation #avatarWrap { transform: scale(0.72); }
+.state-conversation #convo { width: 460px; opacity: 1; align-self: stretch; }
+.state-conversation #right { display: none; }
+.state-split #left { flex: 0 0 36%; flex-direction: column; gap: 10px; padding: 16px; }
+.state-split #avatarWrap { transform: scale(0.5); }
+.state-split #convo { width: 100%; opacity: 1; flex: 1; }
+.state-split #right { display: flex; }
+.state-split.full #left { flex: 0 0 0%; padding: 0; overflow: hidden; }
+
+#right { flex: 1; min-width: 0; display: none; position: relative; border-left: 3px solid var(--surface-border); background: var(--surface); }
+#rightbar { position: absolute; top: 10px; right: 12px; z-index: 5; display: flex; gap: 8px; }
+#rightbar button { width: 38px; height: 38px; border: none; border-radius: 10px; cursor: pointer; background: var(--btn-bg); color: var(--btn-fg); font-size: 18px; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+#rightbar button:hover { background: var(--btn-bg-hover); }
+#content { position: absolute; inset: 0; }
+#content iframe { width: 100%; height: 100%; border: none; }
+
+.tray { padding: 64px 28px 28px; display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); align-content: start; overflow-y: auto; height: 100%; }
+.tile { border: none; cursor: pointer; border-radius: 18px; padding: 18px 14px; color: #fff; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; min-height: 120px; box-shadow: 0 6px 16px rgba(0,0,0,.12); transition: transform .15s; text-align: left; position: relative; }
+.tile:hover { transform: translateY(-4px); }
+.tile .te { font-size: 2.4rem; } .tile .tt { font-weight: 800; font-size: 1.05rem; }
+.tile .src { font-size: .72rem; opacity: .85; text-transform: uppercase; letter-spacing: .5px; }
+.tile .new { position: absolute; top: 10px; right: 10px; background: #fff; color: #111; font-size: .65rem; font-weight: 800; padding: 2px 7px; border-radius: 20px; }
+.tray .empty { color: #94a3b8; font-size: 1.1rem; grid-column: 1/-1; text-align: center; margin-top: 40px; }
+
+.bubble { max-width: 88%; flex-shrink: 0; padding: 12px 16px; border-radius: 18px; font-size: 1.15rem; line-height: 1.45; animation: rise .3s ease both; }
+.bubble.kid { align-self: flex-end; background: var(--user, #16b8a6); color: var(--user-fg, #fff); border-bottom-right-radius: 6px; }
+.bubble.avatar { align-self: flex-start; background: var(--bubble-bg); color: var(--bubble-fg); border-bottom-left-radius: 6px; }
+.bubble.avatar p { margin: 0 0 8px; } .bubble.avatar p:last-child { margin-bottom: 0; }
+.bubble.avatar h1,.bubble.avatar h2,.bubble.avatar h3,.bubble.avatar h4,.bubble.avatar h5,.bubble.avatar h6 { margin: 6px 0; line-height: 1.2; font-weight: 800; }
+.bubble.avatar h1 { font-size: 1.35em; } .bubble.avatar h2 { font-size: 1.2em; }
+.bubble.avatar h3,.bubble.avatar h4,.bubble.avatar h5,.bubble.avatar h6 { font-size: 1.08em; }
+.bubble.avatar ul,.bubble.avatar ol { margin: 4px 0 8px; padding-left: 1.3em; } .bubble.avatar li { margin: 3px 0; }
+.bubble.avatar code { background: var(--code-bg); padding: 1px 5px; border-radius: 6px; font-family: ui-monospace, monospace; font-size: .9em; }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* While Piper is reading an avatar reply, sweep a soft gradient sheen (in the
+   kid's accent color) across the bubble so it visibly "reads along". */
+.bubble.avatar.speaking {
+  background: linear-gradient(110deg,
+    var(--bubble-bg) 0%,
+    color-mix(in srgb, var(--user, #16b8a6) 12%, var(--bubble-bg)) 30%,
+    color-mix(in srgb, var(--user, #16b8a6) 34%, var(--bubble-bg)) 50%,
+    color-mix(in srgb, var(--user, #16b8a6) 12%, var(--bubble-bg)) 70%,
+    var(--bubble-bg) 100%);
+  background-size: 200% 100%;
+  animation: speakshimmer 2.1s linear infinite;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--user, #16b8a6) 28%, transparent);
+}
+/* Travel exactly one tile width (200%, matching background-size) so the loop wraps
+   seamlessly — the gradient's matching --bubble-bg ends meet with no visible jump. */
+@keyframes speakshimmer { from { background-position: 200% 0; } to { background-position: 0% 0; } }
+
+.artcard { align-self: flex-start; flex-shrink: 0; width: 88%; border-radius: 18px; overflow: hidden; border: 2px solid var(--card-border); position: relative; cursor: pointer; background: var(--card-bg); animation: rise .3s ease both; }
+.state-split .artcard { width: 100%; }
+.artcard .fill { position: absolute; inset: 0; background: color-mix(in srgb, var(--user, #16b8a6) 22%, var(--card-bg)); width: 0%; z-index: 0; animation: fillgrow var(--est, 12s) linear forwards; }
+.artcard.ready .fill { animation: none; width: 100%; }
+.artcard.failed .fill { animation: none; width: 0; }
+@keyframes fillgrow { from { width: 0%; } to { width: 90%; } }
+.artcard .inner { position: relative; z-index: 1; padding: 14px 16px; min-height: 52px; display: flex; align-items: center; gap: 12px; }
+.artcard .emoji { font-size: 2rem; } .artcard .meta { flex: 1; min-width: 0; }
+.artcard .meta .t { font-weight: 800; font-size: 1.1rem; } .artcard .meta .p { font-size: .92rem; color: var(--muted); }
+.artcard .go { font-weight: 800; color: var(--user, #16b8a6); white-space: nowrap; }
+.artcard.failed { border-color: #fca5a5; } .artcard.failed .go { color: #ef4444; }
+
+#corner { position: absolute; right: 0; bottom: 0; z-index: 10; display: flex; align-items: stretch; }
+#initials { background: var(--user, #16b8a6); color: var(--user-fg, #fff); font-weight: 800; letter-spacing: .5px; display: flex; align-items: center; padding: 0 12px; cursor: pointer; font-size: 15px; border-radius: 12px 0 0 0; transition: background-color .5s ease; }
+#trayBtn { background: var(--user, #16b8a6); border: none; cursor: pointer; padding: 10px 12px; position: relative; display: flex; align-items: center; transition: background-color .5s ease; }
+#trayBtn.empty { display: none; }
+#trayBtn .dot { width: 16px; height: 16px; border-radius: 50%; background: var(--user-fg, #fff); opacity: .9; display: block; }
+#trayBadge { position: absolute; top: 2px; right: 2px; background: #ef4444; color: #fff; font-size: 11px; font-weight: 800; min-width: 16px; height: 16px; border-radius: 9px; display: flex; align-items: center; justify-content: center; padding: 0 4px; }
+
+#inputbar { display: flex; gap: 8px; padding: 8px 6px 2px; }
+#prompt { flex: 1; font: inherit; font-size: 1.05rem; padding: 12px 16px; border: 2px solid var(--input-border); border-radius: 14px; outline: none; background: var(--input-bg); color: var(--fg); }
+#prompt::placeholder { color: var(--muted); }
+#prompt:focus { border-color: var(--user, #16b8a6); }
+#inputbar button { font: inherit; font-weight: 700; border: none; border-radius: 14px; cursor: pointer; padding: 0 18px; background: var(--user, #16b8a6); color: var(--user-fg, #fff); }
+#mic { background: #eef1f6; } #mic.live { background: #ef4444; }
+
+#toast { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); background: #111827; color: #fff; padding: 14px 22px; border-radius: 16px; font-size: 1.05rem; font-weight: 700; cursor: pointer; box-shadow: 0 10px 30px rgba(0,0,0,.35); z-index: 20; animation: rise .3s ease both; }
+
+/* ── Reading practice (native Reader, fills the right panel) ───────────────── */
+.reader { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 18px 22px 22px; gap: 14px; overflow-y: auto; background: var(--card-bg, #fff); color: var(--fg, #1f2430); text-align: center; }
+.reader.done { align-items: center; justify-content: center; gap: 18px; }
+.reader-msg { color: var(--muted, #94a3b8); font-size: 1.2rem; }
+.reader-bar { display: flex; align-items: center; gap: 12px; }
+.reader-title { font-weight: 800; font-size: 1.05rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.reader-lvl { font-size: .8rem; color: var(--muted, #94a3b8); white-space: nowrap; }
+.reader-prog { flex: 1; height: 8px; border-radius: 5px; background: color-mix(in srgb, var(--user, #16b8a6) 18%, transparent); overflow: hidden; }
+.reader-prog-fill { display: block; height: 100%; background: var(--user, #16b8a6); transition: width .4s ease; }
+.reader-stage { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; min-height: 0; }
+.reader-illus { font-size: 4.5rem; line-height: 1; animation: pop .35s ease both; }
+.reader-lines { display: flex; flex-direction: column; gap: 12px; max-width: 640px; }
+.rline { font-size: 1.5rem; line-height: 1.7; color: var(--muted, #94a3b8); opacity: .55; transition: opacity .3s, color .3s; margin: 0; }
+.rline.current { font-size: 2.1rem; font-weight: 700; color: var(--fg, #1f2430); opacity: 1; }
+.rword { border-radius: 8px; padding: 0 2px; transition: background-color .15s, color .15s; }
+.rword.hi { background: var(--user, #16b8a6); color: var(--user-fg, #fff); }
+.rword.ok { color: #16a34a; }
+.rword.miss { color: #dc2626; background: #fde2e2; }
+/* The word the child should read next (live) — underlined + gently pulsing. */
+.rword.next { box-shadow: inset 0 -0.18em 0 color-mix(in srgb, var(--user, #16b8a6) 55%, transparent); color: var(--user, #16b8a6); animation: nextpulse 1.1s ease-in-out infinite; }
+.rword.flash { color: #dc2626; background: #fde2e2; animation: flashmiss .8s ease; }
+@keyframes nextpulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+@keyframes flashmiss { 0% { background: #fecaca; } 100% { background: #fde2e2; } }
+.reader-hint { font-size: 1rem; color: var(--muted, #94a3b8); }
+.reader-feedback { font-size: 1.2rem; font-weight: 700; color: var(--user, #16b8a6); animation: rise .25s ease both; }
+.reader-controls { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.rbtn { font: inherit; font-size: 1.15rem; font-weight: 800; border: 2px solid var(--user, #16b8a6); color: var(--user, #16b8a6); background: transparent; border-radius: 16px; padding: 12px 24px; cursor: pointer; transition: transform .12s, opacity .2s; }
+.rbtn:hover:not(:disabled) { transform: translateY(-2px); }
+.rbtn:disabled { opacity: .45; cursor: default; }
+.rbtn.primary { background: var(--user, #16b8a6); color: var(--user-fg, #fff); }
+.rbtn.live { background: #ef4444; border-color: #ef4444; color: #fff; animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .6; } }
+@keyframes pop { from { opacity: 0; transform: scale(.85); } to { opacity: 1; transform: scale(1); } }
+
+/* ── Declarative widget kit (flashcards, quizzes, …) ──────────────────────── */
+.decl { position: absolute; inset: 0; overflow-y: auto; padding: 22px 26px 30px; background: var(--card-bg, #fff); color: var(--fg, #1f2430); }
+.decl-msg { color: var(--muted, #94a3b8); font-size: 1.2rem; text-align: center; margin-top: 40px; }
+.decl-title { font-size: 1.8rem; color: var(--user, #0ea5e9); margin-bottom: 12px; }
+.decl-h { font-size: 1.3rem; margin: 18px 0 8px; }
+.decl-text { font-size: 1.2rem; line-height: 1.5; margin: 8px 0 16px; cursor: pointer; }
+.decl-figure { margin: 12px 0; text-align: center; }
+.decl-figure img { max-width: 100%; max-height: 320px; border-radius: 14px; }
+.decl-figure figcaption { font-size: .85rem; color: var(--muted, #94a3b8); margin-top: 6px; }
+.decl-credit { opacity: .8; }
+.decl-cards { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); margin: 8px 0 20px; }
+.fcard { perspective: 800px; cursor: pointer; min-height: 130px; }
+.fcard-face { position: relative; height: 100%; min-height: 130px; border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 6px; justify-content: center; align-items: center; text-align: center;
+  border: 3px solid color-mix(in srgb, var(--user, #0ea5e9) 30%, var(--card-bg, #fff)); background: color-mix(in srgb, var(--user, #0ea5e9) 7%, var(--card-bg, #fff)); transition: transform .15s, box-shadow .15s; }
+.fcard:hover .fcard-face { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,.12); }
+.fcard.flipped .fcard-face { background: color-mix(in srgb, var(--user, #0ea5e9) 16%, var(--card-bg, #fff)); }
+.fcard-side { font-size: .65rem; text-transform: uppercase; letter-spacing: .5px; color: var(--muted, #94a3b8); }
+.fcard-text { font-size: 1.15rem; font-weight: 700; }
+.fcard-hint { font-size: .85rem; color: var(--muted, #94a3b8); }
+.fcard-hear { position: absolute; top: 6px; right: 6px; border: none; background: transparent; font-size: 1rem; cursor: pointer; opacity: .6; }
+.fcard-hear:hover { opacity: 1; }
+.decl-quiz { margin: 10px 0 18px; background: color-mix(in srgb, var(--user, #0ea5e9) 10%, var(--card-bg, #fff)); border-radius: 16px; padding: 18px; }
+.decl-q { font-size: 1.2rem; font-weight: 700; margin-bottom: 12px; cursor: pointer; }
+.decl-opts { display: flex; flex-wrap: wrap; gap: 10px; }
+.decl-opts .opt { font: inherit; font-size: 1.05rem; font-weight: 700; padding: 12px 20px; border-radius: 14px; border: none; cursor: pointer; background: var(--card-bg, #fff); color: var(--fg, #1f2430); box-shadow: 0 2px 6px rgba(0,0,0,.1); }
+.decl-opts .opt.right { background: #16a34a; color: #fff; }
+.decl-opts .opt.wrong { background: #ef4444; color: #fff; }
+.decl-foot { margin-top: 16px; text-align: center; }
+
+/* ── Standalone preview page (parent console → Pages → Preview) ───────────── */
+.preview-page { position: fixed; inset: 0; display: flex; flex-direction: column;
+  background: var(--card-bg, #fff); color: var(--fg, #1f2430);
+  font-family: ui-rounded, "Segoe UI", system-ui, sans-serif; }
+.preview-head { display: flex; align-items: center; gap: 8px; padding: 12px 18px;
+  border-bottom: 1px solid var(--card-border, #e3e7ee); font-size: 1.15rem; }
+.preview-head .tag { margin-left: auto; font-size: .82rem; font-weight: 700; color: var(--muted, #64748b); }
+.preview-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+.preview-stage iframe { width: 100%; height: 100%; border: 0; }
+
+/* ── Explorable scene (declarative 'scene' widget) ────────────────────────── */
+.scene { margin: 8px 0 18px; }
+.scene-stage { position: relative; width: 100%; max-width: 520px; aspect-ratio: 1 / 1; margin: 0 auto;
+  border-radius: 20px; overflow: hidden;
+  background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--user, #0891b2) 14%, var(--card-bg, #fff)), var(--card-bg, #fff) 72%); }
+.scene-hint { text-align: center; color: var(--muted, #94a3b8); font-size: 1rem; margin-top: 10px; }
+.scene-caption { text-align: center; color: var(--muted, #94a3b8); font-size: .95rem; margin-top: 6px; }
+
+/* A focusable thing (planet, body part, cycle step) — used by every layout. Each
+   sits in a soft "medallion" disc so it reads as a real object, not a floating emoji. */
+.node-btn { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  background: none; border: none; cursor: pointer; padding: 2px; color: var(--fg, #1f2430);
+  transition: transform .15s; -webkit-tap-highlight-color: transparent; }
+.node-btn:hover { transform: scale(1.1); }
+.node-btn.on { transform: scale(1.16); }
+.node-disc { display: grid; place-items: center; line-height: 1; border-radius: 50%;
+  background: radial-gradient(circle at 36% 30%, color-mix(in srgb, var(--node, var(--user, #0891b2)) 24%, var(--card-bg, #fff)), var(--card-bg, #fff) 78%);
+  box-shadow: 0 5px 16px rgba(0,0,0,.22), inset 0 0 0 2px color-mix(in srgb, var(--node, var(--user, #0891b2)) 38%, transparent);
+  transition: box-shadow .15s; }
+.node-btn:hover .node-disc, .node-btn.on .node-disc { box-shadow: 0 8px 22px rgba(0,0,0,.28), inset 0 0 0 2.5px var(--node, var(--user, #0891b2)); }
+.node-label { font-size: .82rem; font-weight: 800; white-space: nowrap;
+  background: color-mix(in srgb, var(--card-bg, #fff) 86%, transparent); border-radius: 9px; padding: 1px 7px; }
+.node-btn.on .node-label { background: var(--user, #0891b2); color: var(--user-fg, #fff); }
+.node-icon { display: block; color: color-mix(in srgb, var(--node, var(--user, #0891b2)) 78%, var(--fg, #1f2430)); }
+
+/* Faint curated figure behind a 'map' scene (body / plant / globe silhouette). */
+.scene-backdrop { position: absolute; inset: 0; width: 100%; height: 100%;
+  color: color-mix(in srgb, var(--user, #0891b2) 42%, transparent); opacity: .55; pointer-events: none; }
+
+/* Orbit: a center with rings that revolve; each node counter-rotates to stay upright. */
+/* isolate so the node z-indexes below stay contained and the detail overlay (a sibling
+   with a higher z-index) always paints above the whole scene. */
+.orbit, .map, .cycle { isolation: isolate; }
+.orbit { position: absolute; inset: 0; }
+.orbit-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 3; }
+.orbit-ring { position: absolute; top: 50%; left: 50%; border-radius: 50%;
+  border: 1.5px dashed color-mix(in srgb, var(--user, #0891b2) 38%, transparent);
+  animation: orbit-spin linear infinite; transform: translate(-50%, -50%); }
+.orbit-node { position: absolute; top: 0; left: 50%; animation: orbit-spin-rev linear infinite; }
+@keyframes orbit-spin { from { transform: translate(-50%, -50%) rotate(0); } to { transform: translate(-50%, -50%) rotate(360deg); } }
+@keyframes orbit-spin-rev { from { transform: translate(-50%, -50%) rotate(0); } to { transform: translate(-50%, -50%) rotate(-360deg); } }
+
+/* Map: nodes pinned at x/y (parts of a whole). */
+.map { position: absolute; inset: 0; }
+.map-node { position: absolute; transform: translate(-50%, -50%); }
+
+/* Cycle: nodes around a ring with a flowing dashed path (a repeating process). */
+.cycle { position: absolute; inset: 0; }
+.cycle-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.cycle-path { fill: none; stroke: color-mix(in srgb, var(--user, #0891b2) 45%, transparent);
+  stroke-width: 1.4; stroke-dasharray: 4 3; animation: cycle-flow 2.4s linear infinite; }
+@keyframes cycle-flow { to { stroke-dashoffset: -28; } }
+.cycle-node { position: absolute; transform: translate(-50%, -50%); }
+
+/* The zoom-in detail card, overlaid on the stage. */
+.scene-detail { position: absolute; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center;
+  text-align: center; padding: 18px 18px 16px; gap: 6px; overflow-y: auto;
+  background: color-mix(in srgb, var(--card-bg, #fff) 96%, transparent); backdrop-filter: blur(4px);
+  animation: scene-pop .22s ease both; }
+@keyframes scene-pop { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: scale(1); } }
+.scene-x { position: absolute; top: 10px; right: 12px; font-size: 1.1rem; line-height: 1; border: none;
+  background: var(--code-bg, rgba(0,0,0,.07)); color: var(--fg, #1f2430); width: 34px; height: 34px;
+  border-radius: 50%; cursor: pointer; }
+.scene-detail-emoji { font-size: 3.4rem; margin-top: 6px; }
+.scene-detail-label { font-size: 1.5rem; color: var(--user, #0891b2); margin: 0; }
+.scene-detail-blurb { font-size: 1.12rem; line-height: 1.45; cursor: pointer; margin: 2px 0 4px; max-width: 30ch; }
+.scene-facts { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 360px; }
+.scene-facts li { font-size: 1rem; line-height: 1.4; text-align: left; cursor: pointer;
+  background: color-mix(in srgb, var(--user, #0891b2) 9%, var(--card-bg, #fff)); border-radius: 12px; padding: 9px 12px; }
+.scene-fact-hear { opacity: .7; }
+.scene-nav { margin-top: auto; display: flex; align-items: center; gap: 12px; padding-top: 10px; }
+.scene-nav .rbtn { font-size: 1rem; padding: 9px 16px; }
+.scene-nav-pos { font-size: .9rem; color: var(--muted, #94a3b8); font-weight: 700; min-width: 48px; }
+
+@media (prefers-reduced-motion: reduce) {
+  /* Freeze (don't remove) the orbit animation so the staggered start angles still
+     spread the planets around their rings — just without motion. */
+  .orbit-ring, .orbit-node { animation-play-state: paused !important; }
+  .cycle-path { animation: none !important; }
+}
+
+/* ── Memory matching game (native) ────────────────────────────────────────── */
+.mem { position: absolute; inset: 0; overflow-y: auto; padding: 18px 24px 28px; background: var(--card-bg, #fff); color: var(--fg, #1f2430); }
+.mem-msg { color: var(--muted, #94a3b8); font-size: 1.2rem; text-align: center; margin-top: 40px; }
+.mem-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.mem-title { font-weight: 800; font-size: 1.15rem; }
+.mem-stat { font-size: .9rem; color: var(--muted, #94a3b8); white-space: nowrap; }
+.mem-win { text-align: center; font-size: 1.2rem; font-weight: 800; color: var(--user, #7c3aed); margin-bottom: 14px; display: flex; gap: 12px; align-items: center; justify-content: center; flex-wrap: wrap; animation: rise .3s ease both; }
+.mem-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; max-width: 560px; margin: 0 auto; }
+.mcard { aspect-ratio: 1; border: none; border-radius: 16px; cursor: pointer; font-size: 2.6rem; display: flex; align-items: center; justify-content: center;
+  background: var(--user, #7c3aed); color: #fff; box-shadow: 0 3px 10px rgba(0,0,0,.15); transition: transform .15s, background-color .2s; }
+.mcard:hover { transform: translateY(-3px); }
+.mcard .mcard-inner { transition: transform .2s; }
+.mcard.up { background: color-mix(in srgb, var(--user, #7c3aed) 12%, var(--card-bg, #fff)); }
+.mcard.matched { opacity: .55; cursor: default; }
+.mcard.matched:hover { transform: none; }
+
+@media (prefers-reduced-motion: reduce) { #left, #avatarWrap, #convo, .artcard, .bubble, .artcard .fill { transition: none !important; animation: none !important; } }

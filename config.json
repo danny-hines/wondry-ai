@@ -1,0 +1,67 @@
+{
+  "providers": {
+    "mock":   { "type": "mock" },
+    "claude":   { "type": "anthropic", "base_url": "https://api.anthropic.com", "model": "claude-opus-4-8",          "api_key_env": "ANTHROPIC_API_KEY", "max_tokens": 8000, "price": { "in": 15, "out": 75 } },
+    "sonnet":   { "type": "anthropic", "base_url": "https://api.anthropic.com", "model": "claude-sonnet-4-6",         "api_key_env": "ANTHROPIC_API_KEY", "max_tokens": 8000, "price": { "in": 3, "out": 15 } },
+    "haiku":    { "type": "anthropic", "base_url": "https://api.anthropic.com", "model": "claude-haiku-4-5-20251001", "api_key_env": "ANTHROPIC_API_KEY", "max_tokens": 1024, "price": { "in": 1, "out": 5 } },
+    "openai":      { "type": "openai", "base_url": "https://api.openai.com/v1", "model": "gpt-4o",      "api_key_env": "OPENAI_API_KEY", "max_tokens": 8000, "price": { "in": 2.5, "out": 10 } },
+    "openai-mini": { "type": "openai", "base_url": "https://api.openai.com/v1", "model": "gpt-4o-mini", "api_key_env": "OPENAI_API_KEY", "max_tokens": 8000, "price": { "in": 0.15, "out": 0.6 } }
+  },
+  "_comment_providers": "Add OPENAI_API_KEY to .env then point any routing/richness entry at 'openai'/'openai-mini' to use GPT. base_url works with any OpenAI-compatible endpoint (Azure, local). Set 'token_param':'max_completion_tokens' for newer reasoning models. NOTE: kid-facing tasks (artifact/chat/reading) default to Claude for the safety model — changing them swaps that.",
+  "_comment_price": "price is estimated USD per 1M tokens (in=input, out=output); used only for the parent console's cost estimate — adjust to your plan.",
+  "routing": {
+    "default":   "claude",
+    "artifact":  "claude",
+    "reading":   "claude",
+    "plan":      "haiku",
+    "intent":    "haiku",
+    "resolve":   "haiku",
+    "chat":      "claude",
+    "summarize": "haiku"
+  },
+  "fallbackProvider": "mock",
+  "safety": {
+    "blockedTopics": ["weapon", "gun", "kill", "suicide", "drugs", "sex", "porn", "violence", "die", "death", "blood"],
+    "deflection": "Hmm, let's talk about something else! What's something fun you'd like to learn about today?"
+  },
+  "generation": { "estimatedMs": 18000 },
+  "presence": { "enabled": false },
+  "_comment_presence": "When a person-detection sidecar (e.g. Hailo on the Pi) POSTs {state:'present'} to /api/presence, the idle avatar greets. enabled is informational for the sidecar; the kiosk reacts to any presence event.",
+  "richness": {
+    "default": "standard",
+    "degradeTo": "simple",
+    "tiers": {
+      "simple": {
+        "label": "Simple",
+        "provider": "haiku",
+        "maxTokens": 2000,
+        "description": "Lightweight pages on a fast, low-cost model. Best for quick facts and the youngest kids. Cheapest and fastest.",
+        "emphasis": "Keep this page focused and lightweight: a clear illustration or two, short text, and one simple interaction. Favor clarity over spectacle."
+      },
+      "standard": {
+        "label": "Standard",
+        "provider": "sonnet",
+        "maxTokens": 8000,
+        "description": "Visually engaging pages with real illustrations and a few interactions, on a balanced model. Recommended for most kids.",
+        "emphasis": "Aim for a visually engaging page: draw a real illustration or simple diagram of the topic with inline SVG or Canvas, and add a few tappable interactions. Go beyond a plain list of cards."
+      },
+      "rich": {
+        "label": "Rich",
+        "provider": "claude",
+        "maxTokens": 16000,
+        "description": "Immersive, animated, simulation-style pages on the most capable model. Best visuals — slowest and most expensive per page, and needs a capable model to shine.",
+        "emphasis": "Create a rich, immersive, interactive experience — favor a real simulation, animated scene, or explorable diagram over static cards. For example, the solar system should render planets actually orbiting the sun that the child can tap to focus on and hear about, not a list. Use inline SVG/Canvas animation, smooth transitions, and scene-to-scene navigation so it feels like a delightful interactive app. Use your larger output budget to build something genuinely special."
+      }
+    }
+  },
+  "media": {
+    "images": { "enabled": true, "sources": ["wikimedia"], "maxBytes": 3000000, "maxPerArtifact": 3, "agentic": false },
+    "video":  { "enabled": false }
+  },
+  "tts": {
+    "voicesDir": "voices",
+    "defaultVoice": "en_US-lessac-high",
+    "synthesis": { "length_scale": 1.05 },
+    "synthArgs": ["--sentence-silence", "0.3"]
+  }
+}

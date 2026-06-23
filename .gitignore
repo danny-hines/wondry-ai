@@ -1,0 +1,25 @@
+# Secrets / environment — never commit real keys (ANTHROPIC_API_KEY, ADMIN_PASSWORD)
+.env
+.env.local
+*.env.local
+
+node_modules/
+data/*.db
+data/*.db-*
+artifacts/*.html
+artifacts/*.json
+artifacts/media/
+*.log
+
+# Piper TTS (downloaded by: npm run setup-piper)
+voices/
+vendor/
+
+# React client (Vite)
+client/node_modules/
+client/dist/
+client/*.timestamp-*.mjs
+
+# OS cruft
+.DS_Store
+Thumbs.db
