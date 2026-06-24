@@ -24,7 +24,11 @@ function note(c: AudioContext, t0: number) {
   osc.start(t0); osc.stop(t0 + dur + 0.03);
 }
 
-export function startThinkingSound() {
+// `delayMs` holds off the first blip — used after a listen session so there's a
+// brief silent beat between the stop-listening cue and the thinking beeps. The
+// session is still claimed immediately (active=true), so a parallel call is a
+// no-op and stopThinkingSound() during the delay cancels cleanly.
+export function startThinkingSound(delayMs = 0) {
   if (active) return;
   active = true;
   try {
@@ -38,7 +42,7 @@ export function startThinkingSound() {
     if (Math.random() < 0.45) note(ctx, now + 0.12);     // quick double-blip, fairly often
     timer = setTimeout(tick, 160 + Math.random() * 250); // ~0.16–0.41s between blips
   };
-  tick();
+  timer = setTimeout(tick, delayMs);
 }
 
 export function stopThinkingSound() {

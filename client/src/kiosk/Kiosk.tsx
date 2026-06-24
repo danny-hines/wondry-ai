@@ -5,6 +5,7 @@ import type { AvatarEngine } from './avatarEngine';
 import { useSpeech } from './useSpeech';
 import { getStt, type SttSession } from './sttService';
 import { startThinkingSound, stopThinkingSound } from './thinkingSound';
+import { playStartListening, playStopListening } from './listenSound';
 import { rendererFor } from '../content/registry';
 import { getProfiles, getTray, postTurn, markEngagement } from '../lib/api';
 import { mdToHtml } from '../lib/markdown';
@@ -143,14 +144,16 @@ export default function Kiosk() {
     wasSplit.current = isSplit;
   }, [view]);
 
-  const sendTurn = async (text: string) => {
+  // thinkDelayMs holds the thinking beeps off for a beat — used by the voice path so
+  // there's a clear silent gap between the stop-listening cue and the thinking sound.
+  const sendTurn = async (text: string, thinkDelayMs = 0) => {
     text = text.trim(); if (!text || !user) return;
     setHintSeen(true);  // child has talked — drop the first-run "tap to talk" hint
     if (viewRef.current === 'idle') setView('conversation');
     setItems((p) => [...p, { key: 'k' + Date.now(), kind: 'bubble', role: 'kid', text }]);
     setPrompt('');
     avatarRef.current?.setMood('thinking');
-    startThinkingSound();   // quiet beeps/boops instead of a spoken filler
+    startThinkingSound(thinkDelayMs);   // quiet beeps/boops instead of a spoken filler
     bumpIdle();
     try {
       const res = await postTurn(user.id, text);
@@ -291,12 +294,14 @@ export default function Kiosk() {
         if (session) return;
         setMicLive(true);
         avatarRef.current?.setMood('listening');
+        playStartListening();   // low→high cue: "I'm listening"
         startAmp();
         // Capture ended (tap-to-stop, silence, or timeout): drop the listening UI and
         // show we're processing immediately, even if transcription is still in flight.
         let ended = false;
         const endCapture = () => {
           if (ended) return; ended = true;
+          playStopListening();   // high→low cue: "got it"
           stopAmp();
           setMicLive(false);
           avatarRef.current?.setMood('thinking');
@@ -305,7 +310,7 @@ export default function Kiosk() {
         session.result.then(({ transcript }) => {
           session = null;
           endCapture();   // safety net if the engine didn't signal capture-end
-          if (transcript) sendTurn(transcript);
+          if (transcript) sendTurn(transcript, 280);   // pause after the stop-listening cue
           else if (viewRef.current !== 'split') avatarRef.current?.setMood('idle');
         });
       },
