@@ -6,11 +6,12 @@ import { useSpeech } from './useSpeech';
 import { getStt, type SttSession } from './sttService';
 import { startThinkingSound, stopThinkingSound } from './thinkingSound';
 import { playStartListening, playStopListening } from './listenSound';
+import { playAlarm } from './alarmSound';
 import { rendererFor } from '../content/registry';
-import { getProfiles, getTray, postTurn, markEngagement } from '../lib/api';
+import { getProfiles, getTray, postTurn, markEngagement, getTimers, cancelTimer } from '../lib/api';
 import { mdToHtml } from '../lib/markdown';
 import { readableOn } from '../lib/contrast';
-import type { Profile, Artifact, WSMessage } from '../lib/types';
+import type { Profile, Artifact, WSMessage, ActiveTimer } from '../lib/types';
 import './kiosk.css';
 
 const IDLE_MS = 2 * 60 * 1000;
@@ -35,6 +36,8 @@ export default function Kiosk() {
   const [toast, setToast] = useState<{ text: string; onClick: () => void } | null>(null);
   const [prompt, setPrompt] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [timers, setTimers] = useState<ActiveTimer[]>([]);
+  const [nowTick, setNowTick] = useState(() => Date.now());
 
   const avatarRef = useRef<AvatarEngine | null>(null);
   const { speak, speakingId } = useSpeech(avatarRef);
@@ -55,6 +58,10 @@ export default function Kiosk() {
     try { const t = await getTray(u.id); setTray({ count: t.artifacts.length, unseen: t.unseen }); } catch {}
   }, []);
 
+  const refreshTimers = useCallback(async () => {
+    try { const r = await getTimers(); setTimers(r.timers); } catch {}
+  }, []);
+
   const bumpIdle = useCallback(() => {
     if (idleTimer.current) clearTimeout(idleTimer.current);
     idleTimer.current = setTimeout(() => { if (viewRef.current !== 'split') goIdle(); }, IDLE_MS);
@@ -66,6 +73,17 @@ export default function Kiosk() {
   }, []);
   useEffect(() => { if (user) avatarRef.current?.setColor(user.color); }, [user]);
   useEffect(() => { if (user) refreshTray(); }, [user, refreshTray]);
+  useEffect(() => { refreshTimers(); }, [refreshTimers]);   // timers are device-global, not per user
+  // Tick once a second only while timers exist, so the countdown chips update live.
+  useEffect(() => {
+    if (!timers.length) return;
+    const i = setInterval(() => setNowTick(Date.now()), 500);
+    return () => clearInterval(i);
+  }, [timers.length]);
+
+  // Tap a chip to cancel; optimistic-remove, then tell the server (which broadcasts
+  // a timer.cancelled the other views pick up — harmless if it races our removal).
+  const dismissTimer = (id: string) => { setTimers((p) => p.filter((t) => t.id !== id)); cancelTimer(id); };
 
   useEffect(() => {
     let ws: WebSocket;
@@ -75,6 +93,13 @@ export default function Kiosk() {
       ws.onmessage = (m) => {
         let evt: WSMessage; try { evt = JSON.parse(m.data); } catch { return; }
         const a = evt.artifact; const u = userRef.current;
+        // Timers are device-global — show/fire them whoever's currently active.
+        if (evt.type.startsWith('timer.') && evt.timer) {
+          if (evt.type === 'timer.created') setTimers((p) => p.some((t) => t.id === evt.timer!.id) ? p : [...p, evt.timer!].sort((x, y) => x.fire_at - y.fire_at));
+          else if (evt.type === 'timer.cancelled') setTimers((p) => p.filter((t) => t.id !== evt.timer!.id));
+          else if (evt.type === 'timer.fired') { setTimers((p) => p.filter((t) => t.id !== evt.timer!.id)); fireTimer(evt.timer); }
+          return;
+        }
         if (a && u && !(a.profile_id === u.id || a.profile_id == null)) { if (evt.type !== 'hello') refreshTray(); return; }
         if (evt.type === 'artifact.completed' && a) { completeCard(a); announce(a); refreshTray(); }
         else if (evt.type === 'artifact.failed' && a) { failCard(a); }
@@ -107,6 +132,21 @@ export default function Kiosk() {
       setToast({ text: `✨ ${a.title} is ready — tap to open`, onClick: () => { if (u) markEngagement(a.id, 'seen', u.id).then(refreshTray); openArtifact(a); } });
       setTimeout(() => setToast(null), 9000);
     }
+  };
+
+  // A timer went off: sound the alarm, wake the avatar (even from idle), and have it
+  // announce. Reuses the speak/idle machinery the wake word and greeting already use.
+  const fireTimer = (timer: ActiveTimer) => {
+    const u = userRef.current;
+    playAlarm();
+    if (viewRef.current === 'idle') { setView('conversation'); setHintSeen(true); }
+    bumpIdle();
+    const line = timer.label
+      ? `Ding ding! Time to ${timer.label}!`
+      : `Ding ding ding! Your ${timer.pretty} timer is done!`;
+    speak(line, u?.id);
+    setToast({ text: `⏰ ${timer.label ? timer.label : `${timer.pretty} timer`} — done!`, onClick: () => {} });
+    setTimeout(() => setToast(null), 8000);
   };
 
   // Greet on approach: a presence event (Pi person-detector → /api/presence) makes
@@ -390,6 +430,24 @@ export default function Kiosk() {
                 : null}
         </div>
       </div>
+
+      {timers.length > 0 && (
+        <div id="timers">
+          {timers.map((t) => {
+            const remain = Math.max(0, t.fire_at - nowTick);
+            const s = Math.ceil(remain / 1000);
+            const mmss = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+            return (
+              <button key={t.id} className={`timerChip${remain === 0 ? ' done' : ''}`} title="Tap to cancel" onClick={() => dismissTimer(t.id)}>
+                <span className="tcIcon" aria-hidden="true">⏰</span>
+                <span className="tcTime">{mmss}</span>
+                {t.label && <span className="tcLabel">{t.label}</span>}
+                <span className="tcX" aria-hidden="true">✕</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <div id="corner" ref={cornerRef}>
         <span id="initials" title="Tap to switch user" onClick={switchUser}>{user?.initials || '··'}</span>

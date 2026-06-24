@@ -16,7 +16,9 @@ import tts from './routes/tts.js';
 import presence from './routes/presence.js';
 import wake from './routes/wake.js';
 import kiosk, { isManaged } from './routes/kiosk.js';
+import timers from './routes/timers.js';
 import { ttsAvailable, ensureServer } from './services/tts.js';
+import { initScheduler } from './services/scheduler.js';
 
 // Changes on every process start; the kiosk's parent menu watches this to know the
 // server has restarted (e.g. after a self-update) so it can reload onto new code.
@@ -24,6 +26,7 @@ const BOOT_ID = Date.now();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 initSchema();
+initScheduler();   // re-arm timers that were pending across a restart
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
@@ -35,6 +38,7 @@ app.use('/api', tts);
 app.use('/api', presence);
 app.use('/api', wake);
 app.use('/api', kiosk);
+app.use('/api', timers);
 app.use('/api/admin', admin);
 
 app.get('/api/health', (req, res) =>

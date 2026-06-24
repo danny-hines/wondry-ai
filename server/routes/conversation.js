@@ -9,6 +9,8 @@ import { startGeneration, createArtifact, getArtifact } from '../services/genera
 import { enabledTypes, isTypeEnabled } from '../content/registry.js';
 import '../content/index.js'; // ensure content types are registered
 import { getChatSystemPrompt, INTENT_SYSTEM_PROMPT, RESOLVE_TOPIC_SYSTEM_PROMPT } from '../services/systemPrompt.js';
+import { parseTimer, formatDuration } from '../services/timerParse.js';
+import { startTimer, cancelTimer, listActiveTimers } from '../services/scheduler.js';
 
 export const router = express.Router();
 
@@ -97,6 +99,28 @@ router.post('/turn', async (req, res) => {
   if (isAffirmation(text) && pend && now() - pend.at < OFFER_TTL) {
     pendingOffers.delete(convId);
     return res.json(await startArtifactTurn(convId, profile, pend.topic, `Yay! Let me make you a page about ${pend.topic}!`));
+  }
+
+  // 1.2) timer? "set a timer for 5 minutes", "cancel my timer". Handled here (not as
+  // a content type — a timer renders no page) and ahead of artifact intent so "set a
+  // timer" never gets misread as "build a page". The scheduler fires it later over WS.
+  const timerReq = parseTimer(text);
+  if (timerReq) {
+    pendingOffers.delete(convId);
+    if (timerReq.action === 'cancel') {
+      const active = listActiveTimers();
+      active.forEach((t) => cancelTimer(t.id));
+      const reply = active.length ? 'Okay, I stopped your timer.' : "You don't have a timer running right now.";
+      addMessage(convId, profileId, 'avatar', reply);
+      return res.json({ kind: 'timer', reply });
+    }
+    const timer = startTimer({ durationMs: timerReq.durationMs, label: timerReq.label, createdBy: 'voice' });
+    const pretty = formatDuration(timerReq.durationMs);
+    const reply = timerReq.label
+      ? `Okay! I'll remind you to ${timerReq.label} in ${pretty}.`
+      : `Okay! Timer set for ${pretty}. I'll let you know when it's done!`;
+    addMessage(convId, profileId, 'avatar', reply, 'text');
+    return res.json({ kind: 'timer', reply, timer });
   }
 
   // 1.5) does an enabled content type claim this utterance? (reading, flashcards,

@@ -29,6 +29,13 @@ function dropColumn(table, col) {
 }
 
 export function initSchema() {
+  // One-time: timers became device-global (no profile_id). Drop the old per-child
+  // table so the CREATE below rebuilds the new shape. The feature never shipped, so
+  // any rows are throwaway dev data. PRAGMA on a missing table returns [] (no error).
+  try {
+    const cols = db.prepare('PRAGMA table_info(timers)').all().map((c) => c.name);
+    if (cols.includes('profile_id')) db.exec('DROP TABLE IF EXISTS timers');
+  } catch { /* no timers table yet */ }
   db.exec(`
     CREATE TABLE IF NOT EXISTS profiles (
       id TEXT PRIMARY KEY, name TEXT NOT NULL, initials TEXT NOT NULL, color TEXT NOT NULL,
@@ -90,6 +97,16 @@ export function initSchema() {
       cost_usd REAL NOT NULL DEFAULT 0, created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_usage_created ON api_usage(created_at);
+    -- Countdown timers (and, later, reminders). Device-global, not per child — a
+    -- shared kiosk timer like a kitchen timer. fire_at is the absolute epoch-ms
+    -- deadline so a timer survives a restart; the scheduler re-arms pending rows on
+    -- boot. status: pending | fired | cancelled. created_by: voice (kiosk) | parent.
+    CREATE TABLE IF NOT EXISTS timers (
+      id TEXT PRIMARY KEY, label TEXT, duration_ms INTEGER NOT NULL, fire_at INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending', created_by TEXT NOT NULL DEFAULT 'voice',
+      created_at INTEGER NOT NULL, fired_at INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_timers_status ON timers(status);
     CREATE TABLE IF NOT EXISTS config_kv ( key TEXT PRIMARY KEY, value TEXT );
     CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_id);
     CREATE INDEX IF NOT EXISTS idx_artifacts_profile ON artifacts(profile_id);
@@ -170,6 +187,25 @@ export function usageSince(ts) {
 export function usageByModel(ts) {
   return db.prepare(`SELECT model, COALESCE(SUM(cost_usd),0) AS cost, COUNT(*) AS n
     FROM api_usage WHERE created_at >= ? GROUP BY model ORDER BY cost DESC`).all(ts);
+}
+
+// --- timers (device-global countdown timers; reminders later) ---
+export function createTimerRow({ label, durationMs, fireAt, createdBy = 'voice' }) {
+  const id = uid();
+  db.prepare(`INSERT INTO timers (id,label,duration_ms,fire_at,status,created_by,created_at)
+              VALUES (?,?,?,?, 'pending', ?, ?)`)
+    .run(id, label ?? null, Math.round(durationMs), Math.round(fireAt), createdBy, now());
+  return getTimerRow(id);
+}
+export function getTimerRow(id) { return db.prepare('SELECT * FROM timers WHERE id=?').get(id); }
+// All pending timers, soonest first — drives the kiosk's countdown chips and the
+// boot re-arm. Not scoped to a child: timers belong to the device, not a profile.
+export function activeTimers() {
+  return db.prepare("SELECT * FROM timers WHERE status='pending' ORDER BY fire_at ASC").all();
+}
+export function setTimerStatus(id, status, firedAt = null) {
+  db.prepare('UPDATE timers SET status=?, fired_at=? WHERE id=?').run(status, firedAt, id);
+  return getTimerRow(id);
 }
 
 export function getKV(key, fallback = null) {

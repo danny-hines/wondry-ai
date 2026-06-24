@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAdmin } from './AdminContext';
-import { getVoices } from '../lib/api';
+import { getVoices, getTimers, createTimer, cancelTimer } from '../lib/api';
 import { readableOn } from '../lib/contrast';
 import { Avatar } from '../kiosk/Avatar';
 import type { AvatarEngine } from '../kiosk/avatarEngine';
 import { useSpeech } from '../kiosk/useSpeech';
-import type { Profile, Artifact, AdminConfig, LogMessage, SafetyEntry, ReadingReportRow, ContentTypeManifest, RichnessTier, UsageReport } from '../lib/types';
+import type { Profile, Artifact, AdminConfig, LogMessage, SafetyEntry, ReadingReportRow, ContentTypeManifest, RichnessTier, UsageReport, ActiveTimer } from '../lib/types';
 
 const when = (t: number) => new Date(t).toLocaleString();
 
@@ -295,6 +295,72 @@ export function Kids() {
 }
 
 // Per-child read-aloud progress: accuracy and the words they most often miss.
+// Timers are device-global (a shared kiosk timer, not per child). Start a countdown
+// that rings on the device with the avatar announcing it, and see/cancel any active
+// timer — including ones set on the kiosk by voice. Endpoints are public (no gate).
+export function Timers() {
+  const [timers, setTimers] = useState<ActiveTimer[]>([]);
+  const [mins, setMins] = useState('');
+  const [label, setLabel] = useState('');
+  const [now, setNow] = useState(() => Date.now());
+
+  const load = () => getTimers().then((r) => setTimers(r.timers)).catch(() => {});
+  // Poll timers (and tick the clock) so countdowns stay live and fired ones drop off.
+  useEffect(() => {
+    load();
+    const reload = setInterval(load, 5000);
+    const tick = setInterval(() => setNow(Date.now()), 1000);
+    return () => { clearInterval(reload); clearInterval(tick); };
+  }, []);
+
+  const fmt = (ms: number) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+  const start = async (minutes: number, lbl?: string) => {
+    const ms = Math.round(minutes * 60000);
+    if (!Number.isFinite(ms) || ms < 1000) return;
+    await createTimer(ms, lbl?.trim() || null, 'parent');
+    setMins(''); setLabel('');
+    load();
+  };
+  const cancel = async (id: string) => { await cancelTimer(id); load(); };
+
+  return (
+    <>
+      <p className="muted" style={{ marginBottom: 12 }}>
+        Start a shared countdown timer on the kiosk. It rings on the device and the avatar announces when time's up.
+        Anyone at the kiosk can also set one by saying “set a timer for 5 minutes.”
+      </p>
+      <div className="card">
+        <div className="row" style={{ justifyContent: 'space-between' }}>
+          <strong style={{ fontSize: '1.05rem' }}>New timer</strong>
+          <div className="row" style={{ gap: 6 }}>
+            {[5, 10, 15, 30].map((m) => <button key={m} className="act sec" onClick={() => start(m)}>{m} min</button>)}
+          </div>
+        </div>
+        <div className="row" style={{ marginTop: 12, alignItems: 'flex-end' }}>
+          <div><label>Minutes</label><input type="number" min="1" value={mins} onChange={(e) => setMins(e.target.value)} style={{ width: 90 }} /></div>
+          <div style={{ flex: 1, minWidth: 160 }}><label>Label (optional)</label>
+            <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="clean up toys" style={{ width: '100%' }} /></div>
+          <button className="act" disabled={!(Number(mins) > 0)} onClick={() => start(Number(mins), label)}>Start timer</button>
+        </div>
+      </div>
+      <div className="card">
+        <strong style={{ fontSize: '1.05rem' }}>Active timers</strong>
+        <div style={{ marginTop: 10 }}>
+          {timers.length ? timers.map((t) => (
+            <div className="row" key={t.id} style={{ justifyContent: 'space-between', padding: '5px 0' }}>
+              <span>⏰ <strong style={{ fontVariantNumeric: 'tabular-nums' }}>{fmt(t.fire_at - now)}</strong>
+                {t.label ? ` — ${t.label}` : ` (${t.pretty})`}
+                {t.created_by === 'voice' && <span className="muted"> · set on kiosk</span>}
+              </span>
+              <button className="act warn" onClick={() => cancel(t.id)}>Cancel</button>
+            </div>
+          )) : <span className="muted">No active timers.</span>}
+        </div>
+      </div>
+    </>
+  );
+}
+
 export function Reading() {
   const api = useAdmin();
   const [report, setReport] = useState<ReadingReportRow[]>([]);

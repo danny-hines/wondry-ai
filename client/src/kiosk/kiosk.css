@@ -163,6 +163,16 @@
 
 #toast { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); background: #111827; color: #fff; padding: 14px 22px; border-radius: 16px; font-size: 1.05rem; font-weight: 700; cursor: pointer; box-shadow: 0 10px 30px rgba(0,0,0,.35); z-index: 20; animation: rise .3s ease both; }
 
+/* ── Timer chips: countdowns hanging from the top edge; tap one to cancel ───── */
+#timers { position: absolute; top: 0; left: 50%; transform: translateX(-50%); z-index: 18; display: flex; gap: 10px; padding: 0 8px 8px; flex-wrap: wrap; justify-content: center; max-width: 78%; }
+.timerChip { display: inline-flex; align-items: center; gap: 9px; font: inherit; font-weight: 800; cursor: pointer; border: none; border-radius: 0 0 16px 16px; padding: 9px 16px; background: var(--user, #16b8a6); color: var(--user-fg, #fff); box-shadow: 0 6px 18px rgba(0,0,0,.22); animation: rise .3s ease both; }
+.timerChip .tcIcon { font-size: 1.05rem; line-height: 1; }
+.timerChip .tcTime { font-variant-numeric: tabular-nums; font-size: 1.12rem; letter-spacing: .5px; }
+.timerChip .tcLabel { font-weight: 600; opacity: .92; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.timerChip .tcX { opacity: .65; font-size: .82rem; }
+.timerChip.done { animation: chippulse .7s ease-in-out infinite; }
+@keyframes chippulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.07); } }
+
 /* ── Reading practice (native Reader, fills the right panel) ───────────────── */
 .reader { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 18px 22px 22px; gap: 14px; overflow-y: auto; background: var(--card-bg, #fff); color: var(--fg, #1f2430); text-align: center; }
 .reader.done { align-items: center; justify-content: center; gap: 18px; }

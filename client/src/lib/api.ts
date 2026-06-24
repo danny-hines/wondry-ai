@@ -1,4 +1,4 @@
-import type { Profile, TurnResponse, TrayResponse, Artifact, AdminConfig, LogMessage, SafetyEntry, ReadingAttempt, ReadingReportRow, ContentTypeManifest, UsageReport } from './types';
+import type { Profile, TurnResponse, TrayResponse, Artifact, AdminConfig, LogMessage, SafetyEntry, ReadingAttempt, ReadingReportRow, ContentTypeManifest, UsageReport, ActiveTimer } from './types';
 
 const j = <T>(r: Response): Promise<T> => r.json() as Promise<T>;
 
@@ -19,6 +19,14 @@ export const ttsArrayBuffer = async (text: string, profileId?: string, voice?: s
   } catch { return null; }
 };
 export const getVoices = () => fetch('/api/voices').then(j<{ voices: string[]; available: boolean; browserVoice?: string }>).catch(() => ({ voices: [] as string[], available: false, browserVoice: undefined }));
+
+// ----- timers (device-global countdown timers; reminders later) -----
+export const getTimers = () =>
+  fetch('/api/timers').then(j<{ timers: ActiveTimer[] }>).catch(() => ({ timers: [] as ActiveTimer[] }));
+export const createTimer = (durationMs: number, label?: string | null, createdBy: 'voice' | 'parent' = 'voice') =>
+  fetch('/api/timers', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ durationMs, label, createdBy }) }).then(j<{ timer: ActiveTimer }>);
+export const cancelTimer = (id: string) =>
+  fetch(`/api/timers/${id}/cancel`, { method: 'POST' }).then(j<{ timer: ActiveTimer }>).catch(() => null);
 
 // ----- kiosk parent controls (PIN-gated update/reload from the touchscreen) -----
 export const getHealth = () => fetch('/api/health').then(j<{ ok: boolean; boot?: number; managed?: boolean; liveGeneration?: boolean; tts?: boolean }>);
