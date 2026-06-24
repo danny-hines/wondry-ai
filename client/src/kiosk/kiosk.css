@@ -29,6 +29,18 @@
    development keeps its cursor. Scoped to .kiosk-root so the console is unaffected. */
 .kiosk-root.hide-cursor, .kiosk-root.hide-cursor * { cursor: none; }
 
+/* Touch: make every tap snappy — no 300ms delay and no double-tap-zoom detection
+   (that double-tap heuristic is what swallowed the avatar's quick second tap) — and
+   drop the grey tap-flash in favour of explicit :active feedback. `manipulation`
+   still allows scrolling/panning, so the tray and bubbles scroll normally. */
+.kiosk-root, .kiosk-root * { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+#avatarWrap, #corner, .tile, #rightbar button, #inputbar button, #toast {
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+/* Pressed feedback so a tap always reads as received, even while it waits on TTS/pages. */
+#avatarWrap:active { filter: brightness(1.12); }
+.tile:active { transform: scale(.96); }
+#initials:active, #trayBtn:active, #rightbar button:active, #inputbar button:active, #toast:active { filter: brightness(.88); }
+
 #left { display: flex; align-items: center; justify-content: center; flex: 1; min-width: 0; gap: 18px; padding: 24px;
   transition: flex-basis .5s cubic-bezier(.4,0,.2,1), flex-grow .5s cubic-bezier(.4,0,.2,1), padding .4s ease; will-change: flex-basis, flex-grow; }
 #avatarWrap { position: relative; display: flex; align-items: center; justify-content: center; transition: transform .5s cubic-bezier(.4,0,.2,1); will-change: transform; transform: scale(1); cursor: pointer; }

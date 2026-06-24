@@ -12,7 +12,10 @@ export interface SttEngine {
   available: boolean;
   live: boolean;        // supports streaming (interim) transcripts for live word-matching
   backend: string;
-  listen(maxMs?: number): SttSession;
+  // onCaptureEnd fires the instant audio capture stops (tap-to-stop, silence
+  // auto-stop, or timeout) — before transcription resolves — so the UI can show
+  // "working on it" without waiting out a slow transcribe (whisper on the Pi).
+  listen(maxMs?: number, onCaptureEnd?: () => void): SttSession;
   // Streaming: calls onText with the cumulative transcript (final + interim) as the
   // child speaks, so the Reader can advance word-by-word. stop() ends the session.
   listenLive(onText: (text: string) => void, maxMs?: number): LiveSession;
@@ -50,7 +53,7 @@ function webSpeechEngine(): SttEngine | null {
       const timer = setTimeout(() => { stopped = true; try { rec.stop(); } catch {} }, maxMs);
       return { stop: () => { stopped = true; clearTimeout(timer); try { rec.stop(); } catch {} } };
     },
-    listen(maxMs = 12000): SttSession {
+    listen(maxMs = 12000, onCaptureEnd?: () => void): SttSession {
       const rec = new SR();
       rec.lang = 'en-US';
       rec.interimResults = false;
@@ -62,6 +65,7 @@ function webSpeechEngine(): SttEngine | null {
           if (done) return;
           done = true;
           if (timer) clearTimeout(timer);
+          onCaptureEnd?.();
           try { rec.stop(); } catch {}
           resolve({ transcript, backend: 'webspeech' });
         };
@@ -86,7 +90,7 @@ function serverEngine(): SttEngine {
     available: canCapture,
     live: false,
     backend: 'server',
-    listen(maxMs = 8000): SttSession {
+    listen(maxMs = 8000, onCaptureEnd?: () => void): SttSession {
       let stop = () => {};
       const result = new Promise<SttResult>((resolve) => {
         if (!canCapture) { resolve({ transcript: '', backend: 'server' }); return; }
@@ -97,6 +101,7 @@ function serverEngine(): SttEngine {
           let ctx: AudioContext | null = null;
           const finish = async () => {
             if (done) return; done = true;
+            onCaptureEnd?.();
             clearTimeout(timer);
             cancelAnimationFrame(raf); try { ctx?.close(); } catch {}
             try { mr.stop(); } catch {}

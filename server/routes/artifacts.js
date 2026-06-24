@@ -117,7 +117,20 @@ router.get('/artifact/:id', (req, res) => {
     "default-src 'self'; connect-src 'self'; img-src 'self' data:; " +
     "style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; " +
     "base-uri 'none'; form-action 'none'; frame-ancestors 'self'");
-  res.send(fs.readFileSync(p, 'utf8'));
+  res.send(injectTouchBase(fs.readFileSync(p, 'utf8')));
 });
+
+// Generated pages rarely include touch affordances, so give them a baseline: snappy
+// taps (no double-tap-zoom / 300ms delay) and a generic pressed state on tappable
+// things. Conservative (brightness only — no layout-shifting transforms). CSP already
+// permits this inline style.
+const TOUCH_BASE = '<style>*{touch-action:manipulation;-webkit-tap-highlight-color:transparent}'
+  + 'button:active,a:active,[role=button]:active,[onclick]:active,summary:active,label:active,.btn:active,.card:active,.tile:active{filter:brightness(.9)}</style>';
+function injectTouchBase(html) {
+  if (html.includes('</head>')) return html.replace('</head>', TOUCH_BASE + '</head>');
+  const m = html.match(/<body[^>]*>/i);
+  if (m) return html.replace(m[0], m[0] + TOUCH_BASE);
+  return TOUCH_BASE + html;
+}
 
 export default router;

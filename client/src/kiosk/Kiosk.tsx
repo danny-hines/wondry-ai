@@ -222,6 +222,7 @@ export default function Kiosk() {
   // a long press doesn't also start a listen session.
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const heldRef = useRef(false);
+  const tapValid = useRef(false);
   const startHold = () => {
     heldRef.current = false;
     holdTimer.current = setTimeout(() => { heldRef.current = true; setMenuOpen(true); }, 5000);
@@ -233,6 +234,13 @@ export default function Kiosk() {
     if (viewRef.current === 'idle') setView('conversation');
     const r = recRef.current; if (!r) return;
     micLive ? r.stop() : r.start();
+  };
+  // The avatar's primary tap. Driven by pointerup (not onClick) so it's reliable on
+  // the touchscreen — a synthesized click is easily swallowed (e.g. by double-tap
+  // detection), which is why tap-to-stop sometimes didn't register.
+  const onAvatarTap = () => {
+    if (voiceOnly) { toggleListen(); return; }
+    if (view === 'idle') setView('conversation');
   };
 
   // Touchscreen kiosk: hide the mouse pointer across the whole viewport. The cage
@@ -284,13 +292,21 @@ export default function Kiosk() {
         setMicLive(true);
         avatarRef.current?.setMood('listening');
         startAmp();
-        session = engine.listen();
-        session.result.then(({ transcript }) => {
-          session = null;
+        // Capture ended (tap-to-stop, silence, or timeout): drop the listening UI and
+        // show we're processing immediately, even if transcription is still in flight.
+        let ended = false;
+        const endCapture = () => {
+          if (ended) return; ended = true;
           stopAmp();
           setMicLive(false);
-          if (viewRef.current !== 'split') avatarRef.current?.setMood('idle');
+          avatarRef.current?.setMood('thinking');
+        };
+        session = engine.listen(undefined, endCapture);
+        session.result.then(({ transcript }) => {
+          session = null;
+          endCapture();   // safety net if the engine didn't signal capture-end
           if (transcript) sendTurn(transcript);
+          else if (viewRef.current !== 'split') avatarRef.current?.setMood('idle');
         });
       },
       stop() { session?.stop(); },
@@ -309,12 +325,14 @@ export default function Kiosk() {
     <div className={`kiosk-root state-${view}${full ? ' full' : ''}${user?.theme === 'dark' ? ' theme-dark' : ''}${hideCursor ? ' hide-cursor' : ''}`} style={{ ['--user' as any]: user?.color || '#16b8a6', ['--user-fg' as any]: readableOn(user?.color || '#16b8a6') }} onPointerDown={bumpIdle}>
       <div id="left">
         <div id="avatarWrap" className={voiceOnly && micLive ? 'listening' : ''}
-          onPointerDown={startHold} onPointerUp={cancelHold} onPointerLeave={cancelHold} onPointerCancel={cancelHold}
-          onClick={() => {
+          onPointerDown={() => { tapValid.current = true; startHold(); }}
+          onPointerUp={() => {
+            cancelHold();
             if (heldRef.current) { heldRef.current = false; return; }  // long-press already opened the menu
-            if (voiceOnly) { toggleListen(); return; }
-            if (view === 'idle') setView('conversation');
-          }}>
+            if (tapValid.current) onAvatarTap();
+          }}
+          onPointerLeave={() => { tapValid.current = false; cancelHold(); }}
+          onPointerCancel={() => { tapValid.current = false; cancelHold(); }}>
           <Avatar ref={avatarRef} />
           {voiceOnly && !hintSeen && <div className="taptotalk">{micLive ? 'Listening… tap to stop' : 'Tap to talk'}</div>}
         </div>
