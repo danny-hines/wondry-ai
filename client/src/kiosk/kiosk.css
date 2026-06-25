@@ -23,6 +23,11 @@
   border-radius: 26px; display: flex; overflow: hidden; transition: border-color .5s ease, background-color .4s ease, color .4s ease;
   font-family: ui-rounded, "Segoe UI", system-ui, sans-serif; color: var(--fg); }
 
+/* Touchscreen kiosk: scroll by tap+drag, never show a scrollbar. Applies to every
+   scrollable region inside the kiosk (#bubbles, .tray, .reader, .decl, .mem, …). */
+.kiosk-root, .kiosk-root * { scrollbar-width: none; -ms-overflow-style: none; }
+.kiosk-root *::-webkit-scrollbar { width: 0; height: 0; display: none; }
+
 /* Touchscreen kiosk: no mouse, so hide the pointer (unclutter is X11-only and
    does nothing under the Wayland/cage kiosk). Only applied on the built/kiosk
    app (the .hide-cursor class is added in Kiosk.tsx for production), so local

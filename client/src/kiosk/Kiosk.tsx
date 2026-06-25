@@ -183,7 +183,11 @@ export default function Kiosk() {
     speak(`Hi${u.name ? ' ' + u.name : ''}! I'm right here whenever you want to explore something fun.`, u.id);
   }, [speak]);
 
+  // Keep the latest message pinned to the bottom. Smooth when a new bubble/card
+  // arrives; instant while a reply streams in word-by-word (`reveal`) so the growing
+  // text never slips below the fold and smooth animations don't stack and lag behind.
   useEffect(() => { bubblesRef.current?.lastElementChild?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [items]);
+  useEffect(() => { const el = bubblesRef.current; if (el) el.scrollTop = el.scrollHeight; }, [reveal]);
 
   // Opening the pages panel: slide the whole panel — and its docked header controls
   // (initials + My pages) — in from off the bottom-right, so it reads as one window
