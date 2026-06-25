@@ -24,6 +24,15 @@ export function useSpeech(avatarRef: RefObject<AvatarEngine | null>) {
     avatarRef.current?.endSpeaking();
   };
 
+  // Interrupt any in-progress (or queued) speech — e.g. when the child taps to talk so
+  // the avatar doesn't speak over them. Bumping the generation supersedes the in-flight
+  // sentence loop in speak() so the next sentence never starts.
+  const stop = useCallback(() => {
+    genRef.current++;
+    stopAudio();
+    setSpeakingId(null);
+  }, []);
+
   const playBuf = async (arrayBuffer: ArrayBuffer, id: number, onProgress?: (f: number) => void) => {
     const avatar = avatarRef.current; if (!avatar) return;
     const ctx = audioCtx();   // shared warm context (kept alive to avoid the Pi's first-sound clipping)
@@ -82,5 +91,5 @@ export function useSpeech(avatarRef: RefObject<AvatarEngine | null>) {
     }
   }, [avatarRef]);
 
-  return { speak, speakingId };
+  return { speak, speakingId, stop };
 }

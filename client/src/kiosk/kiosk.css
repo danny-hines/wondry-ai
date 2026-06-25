@@ -96,7 +96,11 @@
 
 .bubble { max-width: 88%; flex-shrink: 0; padding: 12px 16px; border-radius: 18px; font-size: 1.15rem; line-height: 1.45; animation: rise .3s ease both; }
 .bubble.kid { align-self: flex-end; background: var(--user, #16b8a6); color: var(--user-fg, #fff); border-bottom-right-radius: 6px; }
-.bubble.avatar { align-self: flex-start; background: var(--bubble-bg); color: var(--bubble-fg); border-bottom-left-radius: 6px; }
+.bubble.avatar { align-self: flex-start; background: var(--bubble-bg); color: var(--bubble-fg); border-bottom-left-radius: 6px; position: relative; cursor: pointer; transition: transform .1s ease; }
+/* Tap an avatar bubble to replay it — press feedback + a faint speaker hint on hover. */
+.bubble.avatar:active { transform: scale(.98); }
+.bubble.avatar::after { content: '🔊'; position: absolute; top: 4px; right: 8px; font-size: .8rem; opacity: 0; transition: opacity .15s ease; pointer-events: none; }
+.bubble.avatar:hover::after { opacity: .45; }
 .bubble.avatar p { margin: 0 0 8px; } .bubble.avatar p:last-child { margin-bottom: 0; }
 .bubble.avatar h1,.bubble.avatar h2,.bubble.avatar h3,.bubble.avatar h4,.bubble.avatar h5,.bubble.avatar h6 { margin: 6px 0; line-height: 1.2; font-weight: 800; }
 .bubble.avatar h1 { font-size: 1.35em; } .bubble.avatar h2 { font-size: 1.2em; }

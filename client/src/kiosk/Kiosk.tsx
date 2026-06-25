@@ -41,7 +41,10 @@ export default function Kiosk() {
   const [nowTick, setNowTick] = useState(() => Date.now());
 
   const avatarRef = useRef<AvatarEngine | null>(null);
-  const { speak, speakingId } = useSpeech(avatarRef);
+  const { speak, speakingId, stop: stopSpeech } = useSpeech(avatarRef);
+  // Bumped whenever a new turn starts or speech is interrupted; a turn whose seq is no
+  // longer current drops its (stale) reply instead of speaking over a newer interaction.
+  const turnSeq = useRef(0);
   const bubblesRef = useRef<HTMLDivElement>(null);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cornerRef = useRef<HTMLDivElement>(null);
@@ -201,6 +204,7 @@ export default function Kiosk() {
   // there's a clear silent gap between the stop-listening cue and the thinking sound.
   const sendTurn = async (text: string, thinkDelayMs = 0) => {
     text = text.trim(); if (!text || !user) return;
+    const seq = ++turnSeq.current;
     setHintSeen(true);  // child has talked — drop the first-run "tap to talk" hint
     if (viewRef.current === 'idle') setView('conversation');
     setItems((p) => [...p, { key: 'k' + Date.now(), kind: 'bubble', role: 'kid', text }]);
@@ -210,6 +214,7 @@ export default function Kiosk() {
     bumpIdle();
     try {
       const res = await postTurn(user.id, text);
+      if (seq !== turnSeq.current) return;   // interrupted/superseded — drop this stale reply
       stopThinkingSound();
       const replyKey = 'a' + Date.now();
       setItems((p) => [...p, { key: replyKey, kind: 'bubble', role: 'avatar', text: res.reply }]);
@@ -217,11 +222,15 @@ export default function Kiosk() {
       if (res.kind === 'artifact' && res.artifact) { const art = res.artifact; setItems((p) => [...p, { key: art.id, kind: 'card', artifact: art }]); }
       speak(res.reply, user.id, replyKey);
     } catch {
+      if (seq !== turnSeq.current) return;
       stopThinkingSound();
       setItems((p) => [...p, { key: 'e' + Date.now(), kind: 'bubble', role: 'avatar', text: 'Oops, something went wrong. Try again?' }]);
       avatarRef.current?.setMood('idle');
     }
   };
+
+  // Tap an avatar bubble to hear it again (re-animates the bubble + lip-sync).
+  const replayBubble = (key: string, text: string) => { const u = userRef.current; if (u) speak(text, u.id, key); };
 
   const openArtifact = (a: Artifact) => {
     setView('split'); setSplitMode('artifact'); setOpenId(a.id); setOpenArt(a);
@@ -345,6 +354,11 @@ export default function Kiosk() {
     recRef.current = {
       start() {
         if (session) return;
+        // The child is taking the floor — stop the avatar so it doesn't talk over them,
+        // and invalidate any in-flight turn so its reply won't blurt out mid-listen.
+        turnSeq.current++;
+        stopSpeech();
+        stopThinkingSound();
         setMicLive(true);
         avatarRef.current?.setMood('listening');
         playStartListening();   // low→high cue: "I'm listening"
@@ -398,7 +412,8 @@ export default function Kiosk() {
           <div id="bubbles" ref={bubblesRef}>
             {items.map((it) => it.kind === 'bubble'
               ? (it.role === 'avatar'
-                  ? <div key={it.key} className={`bubble avatar${it.key === speakingId ? ' speaking' : ''}`} dangerouslySetInnerHTML={{ __html: mdToHtml(it.text) }} />
+                  ? <div key={it.key} className={`bubble avatar${it.key === speakingId ? ' speaking' : ''}`} title="Tap to hear again"
+                      onClick={() => replayBubble(it.key, it.text)} dangerouslySetInnerHTML={{ __html: mdToHtml(it.text) }} />
                   : <div key={it.key} className="bubble kid">{it.text}</div>)
               : <ArtifactCard key={it.key} artifact={it.artifact} onOpen={() => openArtifact(it.artifact)} onRetry={() => sendTurn('make a page about ' + (it.artifact.subject || it.artifact.title))} />)}
           </div>
