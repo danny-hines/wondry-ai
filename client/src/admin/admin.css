@@ -23,6 +23,12 @@
 .muted { color: #9ca3af; font-size: .82rem; }
 .evaltable th { font-size: .72rem; text-transform: uppercase; color: #9ca3af; font-weight: 600; padding: 4px 10px; }
 .evaltable td { padding: 8px 10px; vertical-align: top; }
+/* Prompt-suggestion diff (current → proposed). */
+.diff { font-family: ui-monospace, monospace; font-size: .78rem; line-height: 1.5; max-height: 440px; overflow: auto; border: 1px solid #e5e7eb; border-radius: 8px; background: #fbfbfd; }
+.diff > div { white-space: pre-wrap; word-break: break-word; padding: 0 8px; }
+.diff .d-add { background: #e7f7ec; color: #14532d; }
+.diff .d-del { background: #fdeaea; color: #7f1d1d; }
+.diff .d-same { color: #6b7280; }
 .prompt-edit { display: flex; gap: 12px; align-items: stretch; flex-wrap: wrap; }
 .prompt-edit > textarea { flex: 1 1 420px; min-height: 220px; }
 .prompt-history { flex: 0 0 220px; display: flex; flex-direction: column; gap: 4px; max-height: 280px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; }
@@ -49,6 +55,14 @@ input[type=color]::-moz-color-swatch { border: none; border-radius: 5px; }
 textarea { width: 100%; min-height: 220px; font-family: ui-monospace, monospace; font-size: .82rem; line-height: 1.5; }
 button.act { font: inherit; font-weight: 600; border: none; border-radius: 8px; padding: 9px 16px; cursor: pointer; background: #4f46e5; color: #fff; }
 button.act.sec { background: #e5e7eb; color: #374151; } button.act.warn { background: #fee2e2; color: #b91c1c; }
+button.act:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Running-eval indicator: a highlighted banner with a spinner + live progress bar. */
+.spinner { width: 18px; height: 18px; flex: 0 0 auto; border-radius: 50%; border: 3px solid #dbe1f3; border-top-color: #4f46e5; animation: spin .9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.eval-running { display: flex; align-items: center; gap: 12px; margin-top: 12px; padding: 11px 14px; border: 1px solid #c7d2fe; background: #eef2ff; border-radius: 10px; }
+.eval-bar { height: 6px; border-radius: 4px; background: #dbe1f3; overflow: hidden; margin-top: 6px; }
+.eval-bar > span { display: block; height: 100%; background: #4f46e5; transition: width .4s ease; }
 .tag { font-size: .7rem; padding: 2px 8px; border-radius: 20px; font-weight: 700; }
 .tag.ready { background: #d1fae5; color: #065f46; } .tag.generating { background: #fef3c7; color: #92400e; } .tag.failed { background: #fee2e2; color: #991b1b; }
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }

@@ -70,6 +70,28 @@ export async function runMatrixEvals({ subjects = DEFAULT_SUBJECTS, levels, conc
   return { mode: 'matrix', kind: 'page', total: combos.length, judged, failed, batch };
 }
 
+// Reading benchmark: generate fresh reading lessons across a fixed interest×level
+// grid (so it's reproducible to re-run after a reading-prompt change), then judge each.
+const DEFAULT_READING_INTERESTS = ['dinosaurs', 'space', 'animals', 'the ocean', 'a magic garden'];
+const DEFAULT_READING_LEVELS = [1, 3, 5]; // pre-reader / developing / advanced — kept modest to bound cost
+export async function runReadingMatrixEvals({ interests = DEFAULT_READING_INTERESTS, levels = DEFAULT_READING_LEVELS, concurrency = 3, batch, onProgress } = {}) {
+  const combos = [];
+  for (const interest of interests) for (const level of levels) combos.push({ interest, level });
+  batch = batch || `reading-bench-${Date.now()}`;
+  let judged = 0, failed = 0;
+  await pool(combos, concurrency, async (c, idx) => {
+    let art = null;
+    try {
+      const id = await createArtifact({ typeId: 'reading', params: { interest: c.interest, level: c.level }, profile: { ...NEUTRAL }, source: 'eval' });
+      art = await waitReady(id);
+    } catch { /* generation threw */ }
+    const r = art ? await judgeArtifact(art, { batch }) : null;
+    if (r) judged++; else failed++;
+    onProgress?.({ done: idx + 1, total: combos.length, judged, failed, label: `${c.interest} · L${c.level}` });
+  });
+  return { mode: 'reading-matrix', kind: 'reading', total: combos.length, judged, failed, batch };
+}
+
 // Conversation suite: generate the avatar's reply to each fixed prompt, then judge it.
 // Always runs the whole suite (replies are fresh each time) — re-run after a chat
 // system-prompt change to compare. Judged against the base (no-profile) chat prompt.

@@ -1,12 +1,13 @@
 // Parental/admin portal API. Password-gated.
 import express from 'express';
 import fs from 'node:fs';
-import { db, uid, now, getKV, setKV, setAudience, audienceFor, readingSummary, usageSince, usageByModel, costByArtifact, listEvals, evalSummary, addPromptVersion, promptVersions, latestPromptVersion } from '../db.js';
+import { db, uid, now, getKV, setKV, setAudience, audienceFor, readingSummary, usageSince, usageByModel, costByArtifact, listEvals, evalSummary, addPromptVersion, promptVersions, latestPromptVersion, recordEvalRun, evalRuns, runSummary, listRunEvals } from '../db.js';
 import { ADMIN_PASSWORD, getConfig, getRichness, liveGenerationEnabled } from '../config.js';
 import { selectedTierId, dailyCap } from '../services/richness.js';
 import { startGeneration, startReadingGeneration, createArtifact, getArtifact, artifactPath } from '../services/generator.js';
-import { runContentEvals, runMatrixEvals, runChatEvals, runChatHistoryEvals } from '../services/evalRunner.js';
+import { runContentEvals, runMatrixEvals, runReadingMatrixEvals, runChatEvals, runChatHistoryEvals } from '../services/evalRunner.js';
 import { EVAL_DIMS } from '../services/evalJudge.js';
+import { suggestPromptImprovement, currentPromptHash, promptKeyForKind } from '../services/evalSuggest.js';
 import { getType, manifests, setTypeEnabled } from '../content/registry.js';
 import { getWakeConfig, setWakeConfig } from '../services/wake.js';
 import { getTimezone, setTimezone, detectedTimezone, supportedTimezones } from '../services/timezone.js';
@@ -137,24 +138,66 @@ router.get('/evals', (req, res) => {
   // For chat-history scoping: when the chat prompt last changed (real replies before
   // this were made under an older prompt, so they're out of scope).
   const promptChangedAt = kind === 'chat' ? (latestPromptVersion('chat_system_prompt')?.created_at ?? null) : undefined;
-  res.json({ kind, dims: EVAL_DIMS[kind], evals: listEvals(kind, 300), summary: evalSummary(kind), job: evalJob, live: liveGenerationEnabled(), promptChangedAt });
+  // Latest run, with the previous run OF THE SAME MODE for a meaningful before/after Δ
+  // (benchmark vs benchmark, live vs live — same-mode runs judge comparable inputs).
+  const runs = evalRuns(kind, 50);
+  const latest = runs[0] || null;
+  const prev = latest ? runs.find((r) => r.id !== latest.id && r.mode === latest.mode) : null;
+  const latestRun = latest ? {
+    batch: latest.id, mode: latest.mode, when: latest.created_at,
+    promptHash: latest.prompt_hash,
+    promptMatches: latest.prompt_hash ? latest.prompt_hash === currentPromptHash(kind) : null,
+    summary: runSummary(latest.id),
+    prevSummary: prev ? runSummary(prev.id) : null, prevWhen: prev ? prev.created_at : null,
+  } : null;
+  res.json({
+    kind, dims: EVAL_DIMS[kind],
+    evals: latest ? listRunEvals(kind, latest.id, 300) : [],   // the latest run's items (weakest first)
+    allEvals: listEvals(kind, 300),                            // all-time latest-per-target (the "All" view)
+    allTime: evalSummary(kind),
+    latestRun,
+    job: evalJob, live: liveGenerationEnabled(), promptChangedAt,
+  });
 });
 
-// Kick off a batch in the background (don't block the request — runs can be long).
+// Kick off a run in the background (runs can be long). mode: 'benchmark' (reproducible
+// sample — matrix for page/reading, suite for chat) or 'live' (judge real outputs —
+// existing artifacts, or logged chat replies). reeval re-scores within the live set.
 router.post('/evals/run', (req, res) => {
   if (evalJob.running) return res.status(409).json({ error: 'an eval run is already in progress' });
   if (!liveGenerationEnabled()) return res.status(400).json({ error: 'no API key set — the judge needs a live model' });
   const { mode, kind, reeval } = req.body || {};
   const k = EVAL_KINDS.includes(kind) ? kind : 'page';
+  const isBench = mode === 'benchmark';
+  const runMode = isBench ? 'benchmark' : 'live';
+  const batch = `${runMode}-${k}-${Date.now()}`;
+  // Stamp the prompt the outputs are produced under so suggestions can be gated to it:
+  // benchmark generates fresh under the current prompt; chat 'live' judges replies made
+  // since the last prompt change (also current). Live content judges pre-existing
+  // artifacts of mixed/unknown prompt → no hash.
+  recordEvalRun({ id: batch, kind: k, mode: runMode, promptKey: promptKeyForKind(k), promptHash: (isBench || k === 'chat') ? currentPromptHash(k) : null });
+
   const onProgress = (p) => { evalJob.progress = p; };
-  evalJob = { running: true, mode: mode || 'existing', kind: k, progress: null, lastResult: null, error: null };
-  const run = mode === 'matrix' ? runMatrixEvals({ concurrency: 3, onProgress })
-    : mode === 'chat-history' ? runChatHistoryEvals({ reeval: !!reeval, limit: 100, onProgress })
-      : (mode === 'chat' || k === 'chat') ? runChatEvals({ onProgress })
-        : runContentEvals({ kind: k, reeval: !!reeval, limit: 200, onProgress });
-  run.then((r) => { evalJob = { running: false, mode: evalJob.mode, kind: k, progress: null, lastResult: r, error: null }; })
-    .catch((e) => { evalJob = { running: false, mode: evalJob.mode, kind: k, progress: null, lastResult: null, error: String(e?.message || e) }; });
+  evalJob = { running: true, mode: runMode, kind: k, progress: null, lastResult: null, error: null };
+  const run = isBench
+    ? (k === 'chat' ? runChatEvals({ batch, onProgress })
+      : k === 'reading' ? runReadingMatrixEvals({ batch, onProgress })
+        : runMatrixEvals({ batch, concurrency: 3, onProgress }))
+    : (k === 'chat' ? runChatHistoryEvals({ batch, reeval: !!reeval, limit: 100, onProgress })
+      : runContentEvals({ kind: k, batch, reeval: !!reeval, limit: 200, onProgress }));
+  run.then((r) => { evalJob = { running: false, mode: runMode, kind: k, progress: null, lastResult: r, error: null }; })
+    .catch((e) => { evalJob = { running: false, mode: runMode, kind: k, progress: null, lastResult: null, error: String(e?.message || e) }; });
   res.json({ started: true });
+});
+
+// Close the loop: propose a minimal revision to this kind's system prompt from the
+// recent judge scores + issues. One model call; the console diffs it and the parent
+// accepts (saved as an 'eval'-authored prompt version, revertible from Settings).
+router.post('/evals/suggest', async (req, res) => {
+  if (!liveGenerationEnabled()) return res.status(400).json({ error: 'no API key set — suggestions need a live model' });
+  const kind = EVAL_KINDS.includes((req.body || {}).kind) ? req.body.kind : 'page';
+  try { res.json(await suggestPromptImprovement(kind)); }
+  catch (e) { res.status(500).json({ error: String(e?.message || e) }); }
 });
 
 // Per-child reading progress for the parent report.

@@ -116,5 +116,26 @@ export interface EvalJob {
   progress: { done: number; total: number; judged: number; skipped?: number; failed?: number; label?: string } | null;
   lastResult: Record<string, unknown> | null; error: string | null;
 }
-export interface EvalsResponse { kind: EvalKind; dims: [string, string][]; evals: EvalRow[]; summary: EvalSummary; job: EvalJob; live: boolean; promptChangedAt?: number | null; }
+// One eval run (batch): its snapshot + the previous same-mode run for a before/after Δ,
+// and whether it was produced under the prompt that's live right now.
+export interface EvalRunInfo {
+  batch: string; mode: 'benchmark' | 'live'; when: number;
+  promptHash: string | null; promptMatches: boolean | null;
+  summary: EvalSummary; prevSummary: EvalSummary | null; prevWhen: number | null;
+}
+export interface EvalsResponse {
+  kind: EvalKind; dims: [string, string][];
+  evals: EvalRow[];        // the latest run's items (weakest first)
+  allEvals: EvalRow[];     // all-time latest-per-target (the "All" toggle)
+  allTime: EvalSummary; latestRun: EvalRunInfo | null;
+  job: EvalJob; live: boolean; promptChangedAt?: number | null;
+}
+// AI-proposed revision to a kind's system prompt, from one benchmark run's evidence.
+// state: 'ok' (suggestion valid), 'stale' (prompt changed since the run), 'no-run'
+// (no prompt-bearing run yet). `field` is the saveConfig field to write on accept.
+export interface EvalSuggestion {
+  kind: EvalKind; field: string; state: 'ok' | 'stale' | 'no-run';
+  currentPrompt: string; changed: boolean; confidence: 'medium' | 'high';
+  summary: string; rationale: string; revisedPrompt: string; runWhen?: number; error?: string;
+}
 export interface WSMessage { type: string; artifact?: Artifact; schedule?: ScheduleItem; at: number; announce?: boolean; state?: 'present' | 'absent'; changed?: boolean; }

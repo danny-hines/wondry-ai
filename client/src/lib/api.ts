@@ -1,4 +1,4 @@
-import type { Profile, TurnResponse, TrayResponse, Artifact, AdminConfig, LogMessage, SafetyEntry, ReadingAttempt, ReadingReportRow, ContentTypeManifest, UsageReport, ScheduleItem, EvalsResponse, PromptVersion } from './types';
+import type { Profile, TurnResponse, TrayResponse, Artifact, AdminConfig, LogMessage, SafetyEntry, ReadingAttempt, ReadingReportRow, ContentTypeManifest, UsageReport, ScheduleItem, EvalsResponse, EvalSuggestion, PromptVersion } from './types';
 
 const j = <T>(r: Response): Promise<T> => r.json() as Promise<T>;
 
@@ -81,8 +81,10 @@ export class AdminApi {
   readingReport = () => this.req('/reading-report').then(j<{ report: ReadingReportRow[] }>);
   usage = () => this.req('/usage').then(j<UsageReport>);
   evals = (kind: string) => this.req(`/evals?kind=${kind}`).then(j<EvalsResponse>);
-  runEvals = (body: { mode?: 'existing' | 'matrix' | 'chat' | 'chat-history'; kind?: string; reeval?: boolean }) =>
+  runEvals = (body: { mode?: 'benchmark' | 'live'; kind?: string; reeval?: boolean }) =>
     this.req('/evals/run', { method: 'POST', body: JSON.stringify(body) }).then(j<{ started?: boolean; error?: string }>);
+  suggestPrompt = (kind: string) =>
+    this.req('/evals/suggest', { method: 'POST', body: JSON.stringify({ kind }) }).then(j<EvalSuggestion>);
   profiles = () => this.req('/profiles').then(j<{ profiles: Profile[] }>);
   saveProfile = (p: Partial<Profile> & { disabledTypes?: string[] }) => this.req('/profiles', { method: 'POST', body: JSON.stringify(p) });
   contentTypes = () => this.req('/content-types').then(j<{ types: ContentTypeManifest[] }>);

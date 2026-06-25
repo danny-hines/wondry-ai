@@ -141,6 +141,16 @@ export function initSchema() {
       verdict TEXT, issues TEXT, raw TEXT, created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_evals_kind ON evals(kind, target_id);
+    CREATE INDEX IF NOT EXISTS idx_evals_batch ON evals(batch);
+    -- One row per eval batch (a "run"): groups its eval rows, records the run mode
+    -- (benchmark = reproducible sample re-run to compare; live = real outputs) and a
+    -- hash of the prompt it ran against — so the console shows the latest run distinctly
+    -- and only offers prompt suggestions for runs produced under the current prompt.
+    CREATE TABLE IF NOT EXISTS eval_runs (
+      id TEXT PRIMARY KEY, kind TEXT NOT NULL, mode TEXT NOT NULL,
+      prompt_key TEXT, prompt_hash TEXT, created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_eval_runs_kind ON eval_runs(kind, created_at);
     -- Append-only history of editable system prompts, so a save can be rolled back to
     -- any prior version (not just the default). author: parent (console) | eval (a
     -- future self-improvement framework) | system. The live value still lives in KV;
@@ -304,10 +314,8 @@ export function listEvals(kind, limit = 300) {
     WHERE e.kind=? AND ${LATEST_PER_TARGET} ORDER BY e.overall ASC, e.created_at DESC LIMIT ?`).all(kind, limit)
     .map((r) => ({ ...r, scores: r.scores ? safeParse(r.scores) : {}, issues: r.issues ? safeParse(r.issues) : [] }));
 }
-// Snapshot averages (overall + per-dimension) over the latest eval per target of a kind.
-export function evalSummary(kind) {
-  const rows = db.prepare(`SELECT e.* FROM evals e WHERE e.kind=? AND ${LATEST_PER_TARGET}`).all(kind)
-    .map((r) => ({ ...r, scores: r.scores ? safeParse(r.scores) : {} }));
+// Aggregate a set of eval rows into a snapshot (overall + per-dimension averages).
+function summarize(rows) {
   const n = rows.length;
   const acc = {};
   for (const r of rows) for (const [k, v] of Object.entries(r.scores || {})) {
@@ -318,6 +326,35 @@ export function evalSummary(kind) {
     n, overall: n ? rows.reduce((s, r) => s + (r.overall || 0), 0) / n : null,
     dims, safetyConcerns: rows.filter((r) => !r.safety_ok).length,
   };
+}
+// All-time snapshot: averages over the latest eval per target of a kind.
+export function evalSummary(kind) {
+  const rows = db.prepare(`SELECT e.* FROM evals e WHERE e.kind=? AND ${LATEST_PER_TARGET}`).all(kind)
+    .map((r) => ({ ...r, scores: r.scores ? safeParse(r.scores) : {} }));
+  return summarize(rows);
+}
+// Snapshot for one run (batch) — every eval row in that batch.
+export function runSummary(batch) {
+  const rows = db.prepare('SELECT overall, scores, safety_ok FROM evals WHERE batch=?').all(batch)
+    .map((r) => ({ ...r, scores: r.scores ? safeParse(r.scores) : {} }));
+  return summarize(rows);
+}
+// The eval rows of one run (weakest first), with artifact info joined for content kinds.
+export function listRunEvals(kind, batch, limit = 300) {
+  const join = kind === 'chat' ? '' : 'LEFT JOIN artifacts a ON a.id = e.target_id';
+  const cols = kind === 'chat' ? 'e.*' : 'e.*, a.title, a.subject, a.reading_level, a.source';
+  return db.prepare(`SELECT ${cols} FROM evals e ${join} WHERE e.kind=? AND e.batch=? ORDER BY e.overall ASC, e.created_at DESC LIMIT ?`)
+    .all(kind, batch, limit).map((r) => ({ ...r, scores: r.scores ? safeParse(r.scores) : {}, issues: r.issues ? safeParse(r.issues) : [] }));
+}
+
+// --- eval runs (one row per batch) ---
+export function recordEvalRun({ id, kind, mode, promptKey = null, promptHash = null }) {
+  db.prepare('INSERT OR IGNORE INTO eval_runs (id,kind,mode,prompt_key,prompt_hash,created_at) VALUES (?,?,?,?,?,?)')
+    .run(id, kind, mode, promptKey, promptHash, now());
+  return id;
+}
+export function evalRuns(kind, limit = 50) {
+  return db.prepare('SELECT * FROM eval_runs WHERE kind=? ORDER BY created_at DESC, id DESC LIMIT ?').all(kind, limit);
 }
 
 // Real avatar chat replies (for judging actual conversation history), each paired
