@@ -5,7 +5,7 @@ import { readableOn } from '../lib/contrast';
 import { Avatar } from '../kiosk/Avatar';
 import type { AvatarEngine } from '../kiosk/avatarEngine';
 import { useSpeech } from '../kiosk/useSpeech';
-import type { Profile, Artifact, AdminConfig, LogMessage, SafetyEntry, ReadingReportRow, ContentTypeManifest, RichnessTier, UsageReport, ScheduleItem } from '../lib/types';
+import type { Profile, Artifact, AdminConfig, LogMessage, SafetyEntry, ReadingReportRow, ContentTypeManifest, RichnessTier, UsageReport, ScheduleItem, EvalsResponse, EvalKind, PromptVersion } from '../lib/types';
 
 const when = (t: number) => new Date(t).toLocaleString();
 
@@ -447,14 +447,172 @@ export function Reading() {
   );
 }
 
+// Content-quality evals: an AI judge (Opus) scores generated content on accuracy,
+// age-fit, engagement, and clarity. Read the weakest items, tighten the AI prompts in
+// Settings, re-run, and watch the numbers move. Runs in the background; we poll.
+const scoreColor = (v: number | null) => (v == null ? '#9ca3af' : v < 3 ? '#dc2626' : v < 4 ? '#d97706' : '#16a34a');
+const Score = ({ v }: { v: number | null }) => <span style={{ color: scoreColor(v), fontWeight: 700 }}>{v == null ? '—' : v.toFixed(1)}</span>;
+const Dim = ({ label, v }: { label: string; v: number | null }) => (
+  <div><div className="muted" style={{ fontSize: '.72rem', textTransform: 'uppercase' }}>{label}</div>
+    <div style={{ fontSize: '1.5rem', fontWeight: 800, color: scoreColor(v) }}>{v == null ? '—' : v.toFixed(2)}</div></div>
+);
+const EVAL_TABS: [EvalKind, string][] = [['page', 'Pages'], ['reading', 'Reading'], ['chat', 'Conversation']];
+const EVAL_BLURB: Record<EvalKind, string> = {
+  page: 'An AI judge scores generated pages. Where Playwright is installed it judges a screenshot of the rendered page — catching layout, label-positioning, and empty-section bugs the source alone would hide; otherwise it reads the source.',
+  reading: 'An AI judge scores generated reading lessons for accuracy, age-fit, engagement, and clarity.',
+  chat: 'Runs a fixed set of kid messages through the chat pipeline and judges each spoken reply for accuracy, age-fit, helpfulness, and tone (including whether it redirects sensitive topics kindly).',
+};
+
+export function Evals() {
+  const api = useAdmin();
+  const [tab, setTab] = useState<EvalKind>('page');
+  const [data, setData] = useState<EvalsResponse | null>(null);
+  const [err, setErr] = useState('');
+  const load = (k: EvalKind = tab) => api.evals(k).then(setData).catch(() => {});
+  useEffect(() => { setData(null); setErr(''); load(tab); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [tab, api]);
+  // Poll while a batch is running so the snapshot + table fill in live.
+  const running = data?.job.running;
+  useEffect(() => {
+    if (!running) return;
+    const t = setInterval(() => load(), 2500);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [running]);
+
+  const run = async (mode: 'existing' | 'matrix' | 'chat' | 'chat-history', reeval = false) => {
+    setErr('');
+    const r = await api.runEvals({ mode, kind: tab, reeval });
+    if (r?.error) { setErr(r.error); return; }
+    setTimeout(() => load(), 400);
+  };
+
+  const s = data?.summary, job = data?.job, evals = data?.evals || [], dims = data?.dims || [];
+  const isChat = tab === 'chat';
+  const busy = job?.running || !data?.live;
+
+  return (
+    <>
+      <div className="subnav">{EVAL_TABS.map(([k, l]) => <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>)}</div>
+      <p className="muted" style={{ margin: '10px 0 6px' }}>{EVAL_BLURB[tab]}</p>
+      {isChat && data && <p className="muted" style={{ margin: '0 0 12px', fontSize: '.8rem' }}>
+        “Judge recent chats” grades real logged replies {data.promptChangedAt
+          ? <>sent since the chat prompt last changed (<strong>{phWhen(data.promptChangedAt)}</strong>)</>
+          : '(the chat prompt hasn’t been edited, so all logged replies are in scope)'} — so you never grade replies made under an older prompt.
+      </p>}
+      {data && !data.live && <div className="card"><span className="muted" style={{ color: '#b91c1c' }}>No API key set — the judge needs a live model (set ANTHROPIC_API_KEY).</span></div>}
+
+      <div className="card">
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            {s && s.n ? <>
+              <strong style={{ fontSize: '1.05rem' }}>Quality snapshot</strong> <span className="muted">· {s.n} judged</span>
+              <div className="row" style={{ gap: 22, marginTop: 8 }}>
+                <Dim label="Overall" v={s.overall} />
+                {dims.map(([k, label]) => <Dim key={k} label={label} v={s.dims[k] ?? null} />)}
+              </div>
+              {s.safetyConcerns > 0 && <div className="muted" style={{ color: '#b91c1c', marginTop: 6 }}>⚠ {s.safetyConcerns} item(s) flagged for safety</div>}
+            </> : <span className="muted">No evals yet — run one to get a quality snapshot.</span>}
+          </div>
+          <div className="row" style={{ gap: 6 }}>
+            {isChat
+              ? <>
+                  <button className="act" disabled={busy} onClick={() => run('chat')}>Run suite</button>
+                  <button className="act sec" disabled={busy} onClick={() => run('chat-history')} title="Judge real logged replies sent since the chat prompt last changed">Judge recent chats</button>
+                </>
+              : <>
+                  <button className="act" disabled={busy} onClick={() => run('existing')}>Judge new</button>
+                  <button className="act sec" disabled={busy} onClick={() => run('existing', true)} title="Re-score everything with the current rubric — use after a prompt change">Re-judge all</button>
+                  {tab === 'page' && <button className="act sec" disabled={busy} onClick={() => run('matrix')}>Generate + judge matrix</button>}
+                </>}
+          </div>
+        </div>
+        {job?.running && <div className="muted" style={{ marginTop: 10 }}>
+          Running {job.mode}… {job.progress ? `${job.progress.done}/${job.progress.total} — ${job.progress.label || ''}` : 'starting…'}
+        </div>}
+        {job && !job.running && job.error && <div className="muted" style={{ color: '#b91c1c', marginTop: 8 }}>{job.error}</div>}
+        {err && <div className="muted" style={{ color: '#b91c1c', marginTop: 8 }}>{err}</div>}
+      </div>
+
+      {evals.length > 0 && <div className="card">
+        <strong style={{ fontSize: '1.05rem' }}>Weakest first</strong>
+        <table className="evaltable" style={{ width: '100%', marginTop: 10, borderCollapse: 'collapse' }}>
+          <thead><tr style={{ textAlign: 'left' }}>
+            <th>Overall</th><th>{isChat ? 'Prompt → reply' : 'Content'}</th>
+            {dims.map(([k, label]) => <th key={k}>{label}</th>)}
+            <th>Judge notes</th>{!isChat && <th></th>}
+          </tr></thead>
+          <tbody>
+            {evals.map((e) => (
+              <tr key={e.id} style={{ borderTop: '1px solid #eef0f3' }}>
+                <td style={{ fontSize: '1.15rem' }}><Score v={e.overall} /></td>
+                <td style={{ maxWidth: 320 }}>
+                  {isChat
+                    ? <><div style={{ fontWeight: 600 }}>{e.label} <span className="muted" style={{ fontWeight: 400, fontSize: '.72rem' }}>· {e.target_id?.startsWith('q') ? 'suite' : 'live'}</span></div><div className="muted" style={{ fontSize: '.8rem' }}>“{e.response}”</div></>
+                    : <><div style={{ fontWeight: 600 }}>{e.subject || e.label || e.title}</div>
+                      <div className="muted" style={{ fontSize: '.74rem' }}>{e.reading_level || '—'}{e.method === 'vision' ? ' · 👁 vision' : ''}{e.safety_ok ? '' : ' · ⚠ safety'}</div></>}
+                </td>
+                {dims.map(([k]) => <td key={k}><Score v={e.scores[k] ?? null} /></td>)}
+                <td style={{ maxWidth: 320 }}><div>{e.verdict}</div>
+                  {e.issues?.length > 0 && <div className="muted" style={{ fontSize: '.78rem' }}>{e.issues.join(' · ')}</div>}</td>
+                {!isChat && <td><a className="act sec" href={`/preview/${e.target_id}`} target="_blank" rel="noreferrer">View</a></td>}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>}
+    </>
+  );
+}
+
+// A system-prompt editor with version history: every Save appends a restorable
+// version (deduped server-side). Click a version to load it into the editor, then
+// Save to apply it (which itself pushes a new history entry). onSave persists the
+// live value; promptKey identifies the history series on the server.
+const phWhen = (t: number) => new Date(t).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+function PromptEditor({ title, blurb, promptKey, initialValue, defaultValue, onSave }:
+  { title: string; blurb: string; promptKey: string; initialValue: string; defaultValue: string; onSave: (v: string) => Promise<unknown> }) {
+  const api = useAdmin();
+  const [value, setValue] = useState(initialValue);
+  const [versions, setVersions] = useState<PromptVersion[]>([]);
+  const [msg, setMsg] = useState('');
+  const loadHistory = () => api.promptHistory(promptKey).then((r) => setVersions(r.versions)).catch(() => {});
+  useEffect(() => { loadHistory(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [promptKey]);
+  const save = async (v: string, label = 'Saved ✓') => { await onSave(v); setMsg(label); setTimeout(() => setMsg(''), 2500); loadHistory(); };
+  // The live saved value is the newest version (or the loaded config value before any
+  // save). Save is enabled only when the editor differs from it.
+  const savedValue = versions[0]?.value ?? initialValue;
+  const dirty = value !== savedValue;
+  return (
+    <div className="card">
+      <h3 style={{ marginBottom: 6 }}>{title}</h3>
+      <p className="muted" style={{ marginBottom: 10 }}>{blurb}</p>
+      <div className="prompt-edit">
+        <textarea value={value} onChange={(e) => setValue(e.target.value)} />
+        <div className="prompt-history">
+          <div className="ph-head">History</div>
+          {versions.length ? versions.map((v) => (
+            <button key={v.id} type="button" className={`ph-item${v.value === value ? ' on' : ''}`} onClick={() => setValue(v.value)} title="Load this version into the editor (then Save to apply)">
+              <span className="ph-when">{phWhen(v.created_at)}</span>
+              <span className="muted">{v.author}{v.note ? ` · ${v.note}` : ''}</span>
+            </button>
+          )) : <span className="muted" style={{ fontSize: '.8rem' }}>No saved versions yet.</span>}
+        </div>
+      </div>
+      <div className="row" style={{ marginTop: 10 }}>
+        <button className="act" disabled={!dirty} onClick={() => save(value)}>Save</button>
+        <button className="act sec" disabled={savedValue === defaultValue} onClick={() => { setValue(defaultValue); save(defaultValue, 'Reset ✓'); }}>Reset to default</button>
+        <span className="muted">{msg}</span>
+      </div>
+    </div>
+  );
+}
+
 type SettingsTab = 'general' | 'content' | 'kiosk' | 'prompts';
 const SETTINGS_TABS: [SettingsTab, string][] = [['general', 'General'], ['content', 'Content'], ['kiosk', 'Kiosk & device'], ['prompts', 'AI prompts']];
 
 export function Settings() {
   const api = useAdmin();
   const [c, setC] = useState<AdminConfig | null>(null);
-  const [cp, setCp] = useState(''); const [sp, setSp] = useState(''); const [rp, setRp] = useState('');
-  const [cpMsg, setCpMsg] = useState(''); const [spMsg, setSpMsg] = useState(''); const [rpMsg, setRpMsg] = useState('');
   const [rich, setRich] = useState(''); const [cap, setCap] = useState('0'); const [richMsg, setRichMsg] = useState('');
   const [wake, setWake] = useState<{ enabled: boolean; phrase: string }>({ enabled: false, phrase: '' });
   const [wakeMsg, setWakeMsg] = useState('');
@@ -463,7 +621,10 @@ export function Settings() {
   const [usage, setUsage] = useState<UsageReport | null>(null);
   const [tab, setTab] = useState<SettingsTab>(() => (sessionStorage.getItem('imag_settings_tab') as SettingsTab) || 'general');
   const pickTab = (t: SettingsTab) => { setTab(t); sessionStorage.setItem('imag_settings_tab', t); };
-  useEffect(() => { api.config().then((cfg) => { setC(cfg); setCp(cfg.chatSystemPrompt); setSp(cfg.systemPrompt); setRp(cfg.readingSystemPrompt); setRich(cfg.richness.selected); setCap(String(cfg.richness.dailyCap || 0)); setWake({ enabled: cfg.wake.enabled, phrase: cfg.wake.phrase }); setKioskPin(cfg.kioskPin || '0000'); }).catch(() => {}); }, [api]);
+  useEffect(() => { api.config().then((cfg) => { setC(cfg); setRich(cfg.richness.selected); setCap(String(cfg.richness.dailyCap || 0)); setWake({ enabled: cfg.wake.enabled, phrase: cfg.wake.phrase }); setKioskPin(cfg.kioskPin || '0000'); }).catch(() => {}); }, [api]);
+  // Keep the cached config fresh after a prompt save, so the editor shows the current
+  // text if the sub-tab is left and re-entered (which remounts the editors).
+  const reloadConfig = () => api.config().then(setC).catch(() => {});
   useEffect(() => { api.contentTypes().then((d) => setTypes(d.types)).catch(() => {}); api.usage().then(setUsage).catch(() => {}); }, [api]);
   const toggleType = async (t: ContentTypeManifest) => { await api.setContentTypeEnabled(t.id, !t.enabled); setTypes((ts) => ts.map((x) => x.id === t.id ? { ...x, enabled: !x.enabled } : x)); };
   if (!c) return <p className="muted">Loading…</p>;
@@ -567,37 +728,16 @@ export function Settings() {
       </div>
       </>}
 
-      {tab === 'prompts' && <>
-      <div className="card">
-        <h3 style={{ marginBottom: 6 }}>Chat personality &amp; safety</h3>
-        <p className="muted" style={{ marginBottom: 10 }}>How the avatar talks to your kids and handles tricky or inappropriate questions. Read aloud, so keep it spoken-style.</p>
-        <textarea value={cp} onChange={(e) => setCp(e.target.value)} />
-        <div className="row" style={{ marginTop: 10 }}>
-          <button className="act" onClick={async () => { await api.saveConfig({ chatSystemPrompt: cp }); setCpMsg('Saved ✓'); }}>Save</button>
-          <button className="act sec" onClick={async () => { setCp(c.defaultChatSystemPrompt); await api.saveConfig({ chatSystemPrompt: c.defaultChatSystemPrompt }); setCpMsg('Reset ✓'); }}>Reset to default</button>
-          <span className="muted">{cpMsg}</span>
-        </div>
-      </div>
-      <div className="card">
-        <h3 style={{ marginBottom: 6 }}>Page-generation system prompt</h3>
-        <p className="muted" style={{ marginBottom: 10 }}>The instructions that shape every interactive page generated for your kids.</p>
-        <textarea value={sp} onChange={(e) => setSp(e.target.value)} />
-        <div className="row" style={{ marginTop: 10 }}>
-          <button className="act" onClick={async () => { await api.saveConfig({ systemPrompt: sp }); setSpMsg('Saved ✓'); }}>Save</button>
-          <button className="act sec" onClick={async () => { setSp(c.defaultSystemPrompt); await api.saveConfig({ systemPrompt: c.defaultSystemPrompt }); setSpMsg('Reset ✓'); }}>Reset to default</button>
-          <span className="muted">{spMsg}</span>
-        </div>
-      </div>
-      <div className="card">
-        <h3 style={{ marginBottom: 6 }}>Reading-lesson system prompt</h3>
-        <p className="muted" style={{ marginBottom: 10 }}>Shapes the leveled read-along stories. It must keep emitting the strict JSON the Reader expects, so edit content/tone rather than the output format.</p>
-        <textarea value={rp} onChange={(e) => setRp(e.target.value)} />
-        <div className="row" style={{ marginTop: 10 }}>
-          <button className="act" onClick={async () => { await api.saveConfig({ readingSystemPrompt: rp }); setRpMsg('Saved ✓'); }}>Save</button>
-          <button className="act sec" onClick={async () => { setRp(c.defaultReadingSystemPrompt); await api.saveConfig({ readingSystemPrompt: c.defaultReadingSystemPrompt }); setRpMsg('Reset ✓'); }}>Reset to default</button>
-          <span className="muted">{rpMsg}</span>
-        </div>
-      </div>
+      {tab === 'prompts' && c && <>
+        <PromptEditor title="Chat personality &amp; safety" promptKey="chat_system_prompt"
+          blurb="How the avatar talks to your kids and handles tricky or inappropriate questions. Read aloud, so keep it spoken-style."
+          initialValue={c.chatSystemPrompt} defaultValue={c.defaultChatSystemPrompt} onSave={async (v) => { await api.saveConfig({ chatSystemPrompt: v }); reloadConfig(); }} />
+        <PromptEditor title="Page-generation system prompt" promptKey="artifact_system_prompt"
+          blurb="The instructions that shape every interactive page generated for your kids."
+          initialValue={c.systemPrompt} defaultValue={c.defaultSystemPrompt} onSave={async (v) => { await api.saveConfig({ systemPrompt: v }); reloadConfig(); }} />
+        <PromptEditor title="Reading-lesson system prompt" promptKey="reading_system_prompt"
+          blurb="Shapes the leveled read-along stories. It must keep emitting the strict JSON the Reader expects, so edit content/tone rather than the output format."
+          initialValue={c.readingSystemPrompt} defaultValue={c.defaultReadingSystemPrompt} onSave={async (v) => { await api.saveConfig({ readingSystemPrompt: v }); reloadConfig(); }} />
       </>}
     </>
   );

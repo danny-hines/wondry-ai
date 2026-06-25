@@ -99,4 +99,22 @@ export interface LogMessage {
   artifact_title?: string | null; safety_flag: number;
 }
 export interface SafetyEntry { id: string; verdict: string; reason: string | null; sample: string | null; created_at: number; }
+export interface PromptVersion { id: string; prompt_key: string; value: string; author: string; note: string | null; created_at: number; }
+
+// ----- evals (AI-judge quality scores; kinds: page / reading / chat) -----
+export type EvalKind = 'page' | 'reading' | 'chat';
+export interface EvalRow {
+  id: string; kind: string; target_id: string | null; label: string | null;
+  prompt: string | null; response: string | null; method: string | null;
+  scores: Record<string, number | null>; overall: number | null; safety_ok: number;
+  verdict: string | null; issues: string[]; created_at: number;
+  title?: string; subject?: string | null; reading_level?: string | null;
+}
+export interface EvalSummary { n: number; overall: number | null; dims: Record<string, number | null>; safetyConcerns: number; }
+export interface EvalJob {
+  running: boolean; mode: string | null; kind?: string | null;
+  progress: { done: number; total: number; judged: number; skipped?: number; failed?: number; label?: string } | null;
+  lastResult: Record<string, unknown> | null; error: string | null;
+}
+export interface EvalsResponse { kind: EvalKind; dims: [string, string][]; evals: EvalRow[]; summary: EvalSummary; job: EvalJob; live: boolean; promptChangedAt?: number | null; }
 export interface WSMessage { type: string; artifact?: Artifact; schedule?: ScheduleItem; at: number; announce?: boolean; state?: 'present' | 'absent'; changed?: boolean; }

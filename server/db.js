@@ -52,6 +52,9 @@ export function initSchema() {
       }
     }
   } catch { /* no timers/schedules table yet */ }
+  // The eval harness generalized content_evals → evals; its old rows are pre-rubric
+  // exploratory scores (dropped, not migrated — they'll be re-judged).
+  try { db.exec('DROP TABLE IF EXISTS content_evals'); } catch { /* none */ }
   db.exec(`
     CREATE TABLE IF NOT EXISTS profiles (
       id TEXT PRIMARY KEY, name TEXT NOT NULL, initials TEXT NOT NULL, color TEXT NOT NULL,
@@ -126,6 +129,27 @@ export function initSchema() {
       created_at INTEGER NOT NULL, fired_at INTEGER
     );
     CREATE INDEX IF NOT EXISTS idx_schedules_status ON schedules(status);
+    -- AI-judge scores from the eval harness, generalized across content kinds. One row
+    -- per judging; re-judging inserts a new row, so quality is tracked over time.
+    -- kind: 'page' | 'reading' | 'chat'. target_id: artifact id, or a stable chat-suite
+    -- key. scores: JSON {dimension: 1-5} (dimensions vary by kind). method: text|vision.
+    -- prompt/response carry a conversation eval's input + the reply being graded.
+    CREATE TABLE IF NOT EXISTS evals (
+      id TEXT PRIMARY KEY, kind TEXT NOT NULL, target_id TEXT,
+      label TEXT, prompt TEXT, response TEXT, batch TEXT, model TEXT, method TEXT,
+      scores TEXT, overall REAL, safety_ok INTEGER NOT NULL DEFAULT 1,
+      verdict TEXT, issues TEXT, raw TEXT, created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_evals_kind ON evals(kind, target_id);
+    -- Append-only history of editable system prompts, so a save can be rolled back to
+    -- any prior version (not just the default). author: parent (console) | eval (a
+    -- future self-improvement framework) | system. The live value still lives in KV;
+    -- this is the audit/restore log.
+    CREATE TABLE IF NOT EXISTS prompt_versions (
+      id TEXT PRIMARY KEY, prompt_key TEXT NOT NULL, value TEXT NOT NULL,
+      author TEXT NOT NULL DEFAULT 'parent', note TEXT, created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_prompt_versions ON prompt_versions(prompt_key, created_at);
     CREATE TABLE IF NOT EXISTS config_kv ( key TEXT PRIMARY KEY, value TEXT );
     CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_id);
     CREATE INDEX IF NOT EXISTS idx_artifacts_profile ON artifacts(profile_id);
@@ -249,6 +273,83 @@ export function setScheduleStatus(id, status, firedAt = null) {
 export function rescheduleRow(id, fireAt) {
   db.prepare("UPDATE schedules SET fire_at=?, status='pending', fired_at=NULL WHERE id=?").run(Math.round(fireAt), id);
   return getScheduleRow(id);
+}
+
+// --- evals (AI-judge scores, generalized across kinds: page / reading / chat) ---
+const evalNum = (v) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(1, Math.min(5, v)) : null);
+export function insertEval(e) {
+  const id = uid();
+  const scores = e.scores
+    ? JSON.stringify(Object.fromEntries(Object.entries(e.scores).map(([k, v]) => [k, evalNum(v)])))
+    : null;
+  db.prepare(`INSERT INTO evals
+      (id,kind,target_id,label,prompt,response,batch,model,method,scores,overall,safety_ok,verdict,issues,raw,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(id, e.kind, e.targetId ?? null, e.label ?? null, e.prompt ?? null, e.response ?? null,
+         e.batch ?? null, e.model ?? null, e.method ?? 'text', scores,
+         evalNum(e.overall), e.safety_ok === false ? 0 : 1, e.verdict ?? null,
+         e.issues ? JSON.stringify(e.issues) : null, e.raw ?? null, now());
+  return id;
+}
+// Target ids of a kind that already have an eval — to judge only un-evaluated items.
+export function evaluatedTargetIds(kind) {
+  return new Set(db.prepare('SELECT DISTINCT target_id FROM evals WHERE kind=?').all(kind).map((r) => r.target_id));
+}
+const LATEST_PER_TARGET = `e.id IN (SELECT id FROM evals e2 WHERE e2.kind=e.kind AND e2.target_id=e.target_id ORDER BY created_at DESC, id DESC LIMIT 1)`;
+// Latest eval per target of a kind, worst overall first. Artifact kinds join in title/etc.
+export function listEvals(kind, limit = 300) {
+  const join = kind === 'chat' ? '' : 'LEFT JOIN artifacts a ON a.id = e.target_id';
+  const cols = kind === 'chat' ? 'e.*' : 'e.*, a.title, a.subject, a.reading_level, a.source';
+  return db.prepare(`SELECT ${cols} FROM evals e ${join}
+    WHERE e.kind=? AND ${LATEST_PER_TARGET} ORDER BY e.overall ASC, e.created_at DESC LIMIT ?`).all(kind, limit)
+    .map((r) => ({ ...r, scores: r.scores ? safeParse(r.scores) : {}, issues: r.issues ? safeParse(r.issues) : [] }));
+}
+// Snapshot averages (overall + per-dimension) over the latest eval per target of a kind.
+export function evalSummary(kind) {
+  const rows = db.prepare(`SELECT e.* FROM evals e WHERE e.kind=? AND ${LATEST_PER_TARGET}`).all(kind)
+    .map((r) => ({ ...r, scores: r.scores ? safeParse(r.scores) : {} }));
+  const n = rows.length;
+  const acc = {};
+  for (const r of rows) for (const [k, v] of Object.entries(r.scores || {})) {
+    if (v != null) { (acc[k] = acc[k] || { sum: 0, n: 0 }).sum += v; acc[k].n++; }
+  }
+  const dims = Object.fromEntries(Object.entries(acc).map(([k, d]) => [k, d.n ? d.sum / d.n : null]));
+  return {
+    n, overall: n ? rows.reduce((s, r) => s + (r.overall || 0), 0) / n : null,
+    dims, safetyConcerns: rows.filter((r) => !r.safety_ok).length,
+  };
+}
+
+// Real avatar chat replies (for judging actual conversation history), each paired
+// with the kid message it answered, created at/after `sinceTs` (the cutoff used to
+// only judge replies made under the current system prompt). Skips page-announcement
+// messages (kind!='text') and replies with no preceding kid turn.
+export function recentAvatarReplies(sinceTs = 0, limit = 200) {
+  return db.prepare(`
+    SELECT a.id, a.text AS response, a.created_at, a.profile_id,
+      (SELECT k.text FROM messages k WHERE k.conversation_id=a.conversation_id
+        AND k.role='kid' AND k.safety_flag=0 AND k.created_at < a.created_at
+        ORDER BY k.created_at DESC LIMIT 1) AS prompt
+    FROM messages a
+    WHERE a.role='avatar' AND a.kind='text' AND a.text IS NOT NULL AND a.safety_flag=0 AND a.created_at >= ?
+    ORDER BY a.created_at DESC LIMIT ?`).all(sinceTs, limit).filter((r) => r.prompt);
+}
+
+// --- prompt version history ---
+export function latestPromptVersion(key) {
+  return db.prepare('SELECT * FROM prompt_versions WHERE prompt_key=? ORDER BY created_at DESC, id DESC LIMIT 1').get(key);
+}
+// Records a saved prompt, skipping a no-op save (identical to the latest version).
+export function addPromptVersion({ key, value, author = 'parent', note = null }) {
+  const latest = latestPromptVersion(key);
+  if (latest && latest.value === value) return latest.id;
+  const id = uid();
+  db.prepare('INSERT INTO prompt_versions (id,prompt_key,value,author,note,created_at) VALUES (?,?,?,?,?,?)')
+    .run(id, key, value, author, note, now());
+  return id;
+}
+export function promptVersions(key, limit = 50) {
+  return db.prepare('SELECT id,prompt_key,value,author,note,created_at FROM prompt_versions WHERE prompt_key=? ORDER BY created_at DESC, id DESC LIMIT ?').all(key, limit);
 }
 
 export function getKV(key, fallback = null) {

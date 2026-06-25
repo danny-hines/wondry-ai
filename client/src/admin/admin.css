@@ -21,6 +21,16 @@
 .role-kid { color: #2563eb; } .role-avatar { color: #059669; }
 .flag { color: #dc2626; font-size: .75rem; font-weight: 700; }
 .muted { color: #9ca3af; font-size: .82rem; }
+.evaltable th { font-size: .72rem; text-transform: uppercase; color: #9ca3af; font-weight: 600; padding: 4px 10px; }
+.evaltable td { padding: 8px 10px; vertical-align: top; }
+.prompt-edit { display: flex; gap: 12px; align-items: stretch; flex-wrap: wrap; }
+.prompt-edit > textarea { flex: 1 1 420px; min-height: 220px; }
+.prompt-history { flex: 0 0 220px; display: flex; flex-direction: column; gap: 4px; max-height: 280px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; }
+.ph-head { font-size: .72rem; text-transform: uppercase; color: #9ca3af; font-weight: 600; margin-bottom: 2px; }
+.ph-item { display: flex; flex-direction: column; align-items: flex-start; text-align: left; font: inherit; border: none; background: transparent; border-radius: 6px; padding: 6px 8px; cursor: pointer; }
+.ph-item:hover { background: #f3f4f6; }
+.ph-item.on { background: #eef2ff; }
+.ph-when { font-size: .82rem; font-weight: 600; color: #374151; }
 input, textarea, select { font: inherit; padding: 9px 12px; border: 1px solid #d1d5db; border-radius: 8px; }
 select {
   appearance: none; -webkit-appearance: none;

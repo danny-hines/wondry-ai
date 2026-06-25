@@ -40,6 +40,27 @@ export async function runText(task, { system, prompt, history }) {
   return complete(provider, { system, messages, task });
 }
 
+// Vision completion: judge an image (a rendered-page screenshot). Anthropic-only —
+// returns null on any other provider (incl. mock when there's no key) so the caller
+// falls back to text judging. `prompt` is the instruction; the image leads the turn.
+export async function runVision(task, { system, prompt, imageBase64, mediaType = 'image/png' }) {
+  const provider = resolveProvider(task);
+  if (provider.type !== 'anthropic' || !provider._apiKey) return null;
+  const content = [
+    { type: 'image', source: { type: 'base64', media_type: mediaType, data: imageBase64 } },
+    { type: 'text', text: prompt },
+  ];
+  const res = await fetch(`${provider.base_url}/v1/messages`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-api-key': provider._apiKey, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({ model: provider.model, max_tokens: provider.max_tokens || 4096, system: system || undefined, messages: [{ role: 'user', content }] }),
+  });
+  if (!res.ok) { const t = await res.text(); throw new Error(`Anthropic vision ${res.status}: ${t.slice(0, 300)}`); }
+  const data = await res.json();
+  track(provider, task, data);
+  return (data.content || []).map((b) => b.text || '').join('');
+}
+
 // Generate an artifact: returns { html, title, emoji, color, plan }. `tier` is the
 // resolved content-richness tier (provider, maxTokens, emphasis); when omitted we
 // fall back to the routed 'artifact' provider with its default token budget.

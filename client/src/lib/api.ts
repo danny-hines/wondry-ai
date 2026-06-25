@@ -1,4 +1,4 @@
-import type { Profile, TurnResponse, TrayResponse, Artifact, AdminConfig, LogMessage, SafetyEntry, ReadingAttempt, ReadingReportRow, ContentTypeManifest, UsageReport, ScheduleItem } from './types';
+import type { Profile, TurnResponse, TrayResponse, Artifact, AdminConfig, LogMessage, SafetyEntry, ReadingAttempt, ReadingReportRow, ContentTypeManifest, UsageReport, ScheduleItem, EvalsResponse, PromptVersion } from './types';
 
 const j = <T>(r: Response): Promise<T> => r.json() as Promise<T>;
 
@@ -67,7 +67,8 @@ export class AdminApi {
   private req(path: string, opts: RequestInit = {}) { return fetch('/api/admin' + path, { ...opts, headers: { ...this.h(), ...(opts.headers || {}) } }); }
   async ok(): Promise<boolean> { return (await this.req('/config')).ok; }
   config = () => this.req('/config').then(j<AdminConfig>);
-  saveConfig = (body: { systemPrompt?: string; chatSystemPrompt?: string; readingSystemPrompt?: string; richness?: string; dailyCap?: number; wake?: { enabled?: boolean; phrase?: string }; kioskPin?: string; timezone?: string }) => this.req('/config', { method: 'POST', body: JSON.stringify(body) });
+  saveConfig = (body: { systemPrompt?: string; chatSystemPrompt?: string; readingSystemPrompt?: string; richness?: string; dailyCap?: number; wake?: { enabled?: boolean; phrase?: string }; kioskPin?: string; timezone?: string; promptAuthor?: string }) => this.req('/config', { method: 'POST', body: JSON.stringify(body) });
+  promptHistory = (key: string) => this.req(`/prompt-history?key=${key}`).then(j<{ versions: PromptVersion[] }>);
   log = () => this.req('/log').then(j<{ messages: LogMessage[]; safety: SafetyEntry[] }>);
   artifacts = () => this.req('/artifacts').then(j<{ artifacts: Artifact[]; kids: Profile[] }>);
   setAudience = (id: string, profileId: string, on: boolean) => this.req(`/artifacts/${id}/audience`, { method: 'POST', body: JSON.stringify({ profileId, on }) });
@@ -79,6 +80,9 @@ export class AdminApi {
     this.req('/content', { method: 'POST', body: JSON.stringify(body) }).then(j<{ ok: boolean; artifactId: string }>);
   readingReport = () => this.req('/reading-report').then(j<{ report: ReadingReportRow[] }>);
   usage = () => this.req('/usage').then(j<UsageReport>);
+  evals = (kind: string) => this.req(`/evals?kind=${kind}`).then(j<EvalsResponse>);
+  runEvals = (body: { mode?: 'existing' | 'matrix' | 'chat' | 'chat-history'; kind?: string; reeval?: boolean }) =>
+    this.req('/evals/run', { method: 'POST', body: JSON.stringify(body) }).then(j<{ started?: boolean; error?: string }>);
   profiles = () => this.req('/profiles').then(j<{ profiles: Profile[] }>);
   saveProfile = (p: Partial<Profile> & { disabledTypes?: string[] }) => this.req('/profiles', { method: 'POST', body: JSON.stringify(p) });
   contentTypes = () => this.req('/content-types').then(j<{ types: ContentTypeManifest[] }>);

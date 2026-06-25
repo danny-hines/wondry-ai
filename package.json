@@ -12,6 +12,7 @@
     "test": "node --experimental-sqlite --test",
     "verify": "bash tools/verify.sh",
     "setup-piper": "node tools/setup-piper.mjs",
+    "eval": "node --experimental-sqlite tools/eval-content.mjs",
     "dev": "concurrently -k -n server,client \"npm:dev:server\" \"npm:dev:client\"",
     "dev:server": "node --experimental-sqlite --watch server/index.js",
     "dev:client": "npm --prefix client run dev",

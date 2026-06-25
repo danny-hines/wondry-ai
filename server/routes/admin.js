@@ -1,10 +1,12 @@
 // Parental/admin portal API. Password-gated.
 import express from 'express';
 import fs from 'node:fs';
-import { db, uid, now, getKV, setKV, setAudience, audienceFor, readingSummary, usageSince, usageByModel, costByArtifact } from '../db.js';
+import { db, uid, now, getKV, setKV, setAudience, audienceFor, readingSummary, usageSince, usageByModel, costByArtifact, listEvals, evalSummary, addPromptVersion, promptVersions, latestPromptVersion } from '../db.js';
 import { ADMIN_PASSWORD, getConfig, getRichness, liveGenerationEnabled } from '../config.js';
 import { selectedTierId, dailyCap } from '../services/richness.js';
 import { startGeneration, startReadingGeneration, createArtifact, getArtifact, artifactPath } from '../services/generator.js';
+import { runContentEvals, runMatrixEvals, runChatEvals, runChatHistoryEvals } from '../services/evalRunner.js';
+import { EVAL_DIMS } from '../services/evalJudge.js';
 import { getType, manifests, setTypeEnabled } from '../content/registry.js';
 import { getWakeConfig, setWakeConfig } from '../services/wake.js';
 import { getTimezone, setTimezone, detectedTimezone, supportedTimezones } from '../services/timezone.js';
@@ -43,6 +45,7 @@ router.get('/artifacts', (req, res) => {
   const arts = db.prepare(`
     SELECT a.*, p.name AS profile_name FROM artifacts a
     LEFT JOIN profiles p ON p.id=a.profile_id
+    WHERE a.source != 'eval'
     ORDER BY a.created_at DESC LIMIT 200`).all();
   const costs = costByArtifact(arts.map((a) => a.id));
   for (const a of arts) { a.audience = audienceFor(a.id); a.cost = costs[a.id] || 0; }
@@ -124,6 +127,36 @@ router.get('/usage', (req, res) => {
   });
 });
 
+// --- evals (AI-judge quality scores, by kind: page / reading / chat) ---
+// A single in-flight batch; the Evals tab polls GET /evals for its status + results.
+const EVAL_KINDS = ['page', 'reading', 'chat'];
+let evalJob = { running: false, mode: null, kind: null, progress: null, lastResult: null, error: null };
+
+router.get('/evals', (req, res) => {
+  const kind = EVAL_KINDS.includes(req.query.kind) ? req.query.kind : 'page';
+  // For chat-history scoping: when the chat prompt last changed (real replies before
+  // this were made under an older prompt, so they're out of scope).
+  const promptChangedAt = kind === 'chat' ? (latestPromptVersion('chat_system_prompt')?.created_at ?? null) : undefined;
+  res.json({ kind, dims: EVAL_DIMS[kind], evals: listEvals(kind, 300), summary: evalSummary(kind), job: evalJob, live: liveGenerationEnabled(), promptChangedAt });
+});
+
+// Kick off a batch in the background (don't block the request — runs can be long).
+router.post('/evals/run', (req, res) => {
+  if (evalJob.running) return res.status(409).json({ error: 'an eval run is already in progress' });
+  if (!liveGenerationEnabled()) return res.status(400).json({ error: 'no API key set — the judge needs a live model' });
+  const { mode, kind, reeval } = req.body || {};
+  const k = EVAL_KINDS.includes(kind) ? kind : 'page';
+  const onProgress = (p) => { evalJob.progress = p; };
+  evalJob = { running: true, mode: mode || 'existing', kind: k, progress: null, lastResult: null, error: null };
+  const run = mode === 'matrix' ? runMatrixEvals({ concurrency: 3, onProgress })
+    : mode === 'chat-history' ? runChatHistoryEvals({ reeval: !!reeval, limit: 100, onProgress })
+      : (mode === 'chat' || k === 'chat') ? runChatEvals({ onProgress })
+        : runContentEvals({ kind: k, reeval: !!reeval, limit: 200, onProgress });
+  run.then((r) => { evalJob = { running: false, mode: evalJob.mode, kind: k, progress: null, lastResult: r, error: null }; })
+    .catch((e) => { evalJob = { running: false, mode: evalJob.mode, kind: k, progress: null, lastResult: null, error: String(e?.message || e) }; });
+  res.json({ started: true });
+});
+
 // Per-child reading progress for the parent report.
 router.get('/reading-report', (req, res) => {
   const kids = db.prepare('SELECT id,name,initials,color,reading_level FROM profiles ORDER BY name').all();
@@ -198,11 +231,23 @@ router.get('/config', (req, res) => {
   });
 });
 
+// Editable prompts that keep a version history (config field -> KV key).
+const PROMPT_FIELDS = { systemPrompt: 'artifact_system_prompt', chatSystemPrompt: 'chat_system_prompt', readingSystemPrompt: 'reading_system_prompt' };
+
+router.get('/prompt-history', (req, res) => {
+  const key = req.query.key;
+  if (!Object.values(PROMPT_FIELDS).includes(key)) return res.status(400).json({ error: 'unknown prompt key' });
+  res.json({ versions: promptVersions(key, 50) });
+});
+
 router.post('/config', (req, res) => {
-  const { systemPrompt, chatSystemPrompt, readingSystemPrompt, richness, dailyCap: cap, wake, kioskPin, timezone } = req.body || {};
-  if (typeof systemPrompt === 'string') setKV('artifact_system_prompt', systemPrompt);
-  if (typeof chatSystemPrompt === 'string') setKV('chat_system_prompt', chatSystemPrompt);
-  if (typeof readingSystemPrompt === 'string') setKV('reading_system_prompt', readingSystemPrompt);
+  const { richness, dailyCap: cap, wake, kioskPin, timezone, promptAuthor } = req.body || {};
+  // Save each prompt to KV (the live value) and append a history entry (deduped).
+  const author = promptAuthor === 'eval' ? 'eval' : 'parent';
+  for (const [field, key] of Object.entries(PROMPT_FIELDS)) {
+    const val = req.body[field];
+    if (typeof val === 'string') { setKV(key, val); addPromptVersion({ key, value: val, author }); }
+  }
   if (typeof richness === 'string' && (getRichness().tiers || {})[richness]) setKV('content_richness', richness);
   if (cap !== undefined && cap !== null && cap !== '') setKV('richness_daily_cap', String(Math.max(0, parseInt(cap, 10) || 0)));
   if (wake && typeof wake === 'object') setWakeConfig(wake);

@@ -17,7 +17,8 @@
     "intent":    "haiku",
     "resolve":   "haiku",
     "chat":      "claude",
-    "summarize": "haiku"
+    "summarize": "haiku",
+    "judge":     "claude"
   },
   "fallbackProvider": "mock",
   "safety": {

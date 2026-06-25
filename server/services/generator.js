@@ -47,7 +47,9 @@ export async function createArtifact({ typeId, params = {}, profile, source = 'o
     const aud = audience || (source === 'on_demand' && prof.id ? [prof.id] : []);
     for (const pid of aud) setAudience(id, pid, true);
 
-    emit('artifact.created', { artifact: getArtifact(id) });
+    // Eval-harness content is internal (never shown to a child) — don't broadcast it,
+    // or the kiosk would announce every matrix page as it's generated.
+    if (source !== 'eval') emit('artifact.created', { artifact: getArtifact(id) });
     finishArtifact(id, type, resolved, prof, { source, richness }).catch((e) => failArtifact(id, e.message));
     return id;
   });
@@ -66,12 +68,13 @@ async function finishArtifact(id, type, params, profile, ctx = {}) {
     .run(meta.title ?? type.label, meta.emoji ?? type.emoji, meta.color ?? (profile.color || type.defaultColor || '#8b5cf6'),
          meta.subject ?? null, meta.reading_level ?? profile.reading_level ?? null, meta.plan ?? '', now(), id);
 
-  emit('artifact.completed', { artifact: getArtifact(id) });
+  if (ctx.source !== 'eval') emit('artifact.completed', { artifact: getArtifact(id) });
 }
 
 function failArtifact(id, msg) {
   db.prepare(`UPDATE artifacts SET status='failed', error=? WHERE id=?`).run(msg, id);
-  emit('artifact.failed', { artifact: getArtifact(id) });
+  const a = getArtifact(id);
+  if (a?.source !== 'eval') emit('artifact.failed', { artifact: a });
 }
 
 // Back-compat wrappers (existing call sites keep working through the registry).
