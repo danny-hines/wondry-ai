@@ -2,7 +2,8 @@
 // (R2D2 by way of a library voice) played while the avatar is pondering, in place
 // of a spoken filler line. Pure Web Audio — no assets. Synthesized notes with
 // short envelopes; occasional pitch glides for the "boop". Kept low and soft.
-let ctx: AudioContext | null = null;
+import { audioCtx } from './audio';
+
 let active = false;
 let timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -31,12 +32,10 @@ function note(c: AudioContext, t0: number) {
 export function startThinkingSound(delayMs = 0) {
   if (active) return;
   active = true;
-  try {
-    if (!ctx) ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
-  } catch { active = false; return; }
+  let ctx: AudioContext;
+  try { ctx = audioCtx(); } catch { active = false; return; }
   const tick = () => {
-    if (!active || !ctx) return;
+    if (!active) return;
     const now = ctx.currentTime;
     note(ctx, now);
     if (Math.random() < 0.45) note(ctx, now + 0.12);     // quick double-blip, fairly often

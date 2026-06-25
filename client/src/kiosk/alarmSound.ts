@@ -2,15 +2,7 @@
 // of times so it's noticeable without being harsh (this is a kids' device). Pure
 // Web Audio, same asset-free approach as the listen/thinking cues. Returns a stop()
 // so a caller can cut it short (e.g. the child taps the timer to dismiss).
-let ctx: AudioContext | null = null;
-
-function ensureCtx(): AudioContext | null {
-  try {
-    if (!ctx) ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
-    return ctx;
-  } catch { return null; }
-}
+import { audioCtx } from './audio';
 
 function chirp(c: AudioContext, f0: number, f1: number, t0: number, dur: number) {
   const osc = c.createOscillator();
@@ -28,8 +20,7 @@ function chirp(c: AudioContext, f0: number, f1: number, t0: number, dur: number)
 
 // Play the alarm. `cycles` is how many times the three-chirp burst repeats.
 export function playAlarm(cycles = 3): { stop: () => void } {
-  const c = ensureCtx();
-  if (!c) return { stop: () => {} };
+  let c: AudioContext; try { c = audioCtx(); } catch { return { stop: () => {} }; }
   const oscs: OscillatorNode[] = [];
   // We can't easily track every node, so for stop() we ride a master timer: the
   // alarm is short and self-stopping, and stop() just prevents further bursts.

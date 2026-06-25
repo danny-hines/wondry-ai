@@ -7,8 +7,9 @@ import { getStt, type SttSession } from './sttService';
 import { startThinkingSound, stopThinkingSound } from './thinkingSound';
 import { playStartListening, playStopListening } from './listenSound';
 import { playAlarm } from './alarmSound';
+import { primeAudio, applyWarm, playTestTone } from './audio';
 import { rendererFor } from '../content/registry';
-import { getProfiles, getTray, postTurn, markEngagement, getTimers, cancelSchedule } from '../lib/api';
+import { getProfiles, getTray, postTurn, markEngagement, getTimers, cancelSchedule, getAudioConfig } from '../lib/api';
 import { mdToHtml } from '../lib/markdown';
 import { readableOn } from '../lib/contrast';
 import type { Profile, Artifact, WSMessage, ScheduleItem } from '../lib/types';
@@ -70,6 +71,7 @@ export default function Kiosk() {
 
   useEffect(() => {
     getProfiles().then((ps) => setProfiles(ps));
+    getAudioConfig().then((a) => applyWarm(a.warmHz, a.warmGain));   // warm the output device (anti-clip on some hardware)
   }, []);
   useEffect(() => { if (user) avatarRef.current?.setColor(user.color); }, [user]);
   useEffect(() => { if (user) refreshTray(); }, [user, refreshTray]);
@@ -93,6 +95,9 @@ export default function Kiosk() {
       ws.onmessage = (m) => {
         let evt: WSMessage; try { evt = JSON.parse(m.data); } catch { return; }
         const a = evt.artifact; const u = userRef.current;
+        // Live audio-keepalive tuning from `wondry audio` (retune, or play a test sound).
+        if (evt.type === 'audio') { applyWarm((evt as any).warmHz, (evt as any).warmGain); return; }
+        if (evt.type === 'audio.test') { primeAudio(); playTestTone(); return; }
         // Schedules are device-global — show/fire them whoever's currently active. The
         // chips show countdown timers only; reminders just fire (announce) when due.
         if (evt.type.startsWith('schedule.') && evt.schedule) {
@@ -375,7 +380,7 @@ export default function Kiosk() {
   const panelOpen = view === 'split';
 
   return (
-    <div className={`kiosk-root state-${view}${full ? ' full' : ''}${user?.theme === 'dark' ? ' theme-dark' : ''}${hideCursor ? ' hide-cursor' : ''}`} style={{ ['--user' as any]: user?.color || '#16b8a6', ['--user-fg' as any]: readableOn(user?.color || '#16b8a6') }} onPointerDown={bumpIdle}>
+    <div className={`kiosk-root state-${view}${full ? ' full' : ''}${user?.theme === 'dark' ? ' theme-dark' : ''}${hideCursor ? ' hide-cursor' : ''}`} style={{ ['--user' as any]: user?.color || '#16b8a6', ['--user-fg' as any]: readableOn(user?.color || '#16b8a6') }} onPointerDown={() => { primeAudio(); bumpIdle(); }}>
       <div id="left">
         <div id="avatarWrap" className={voiceOnly && micLive ? 'listening' : ''}
           onPointerDown={() => { tapValid.current = true; startHold(); }}

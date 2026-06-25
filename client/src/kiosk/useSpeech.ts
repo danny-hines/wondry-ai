@@ -2,6 +2,7 @@ import { useRef, useState, useCallback, type RefObject } from 'react';
 import type { AvatarEngine } from './avatarEngine';
 import { ttsArrayBuffer } from '../lib/api';
 import { stripMarkdown } from '../lib/markdown';
+import { audioCtx } from './audio';
 
 function splitSentences(t: string): string[] {
   return (t.match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g) || [t]).map((s) => s.trim()).filter(Boolean);
@@ -11,7 +12,6 @@ function splitSentences(t: string): string[] {
 // sentence i while fetching i+1, drives the avatar mouth from a real AnalyserNode,
 // and supersedes any in-flight speech. Falls back to browser speech if no Piper.
 export function useSpeech(avatarRef: RefObject<AvatarEngine | null>) {
-  const ctxRef = useRef<AudioContext | null>(null);
   const genRef = useRef(0);
   const srcRef = useRef<AudioBufferSourceNode | null>(null);
   // Key of the bubble currently being spoken (passed by the caller as `token`),
@@ -26,9 +26,7 @@ export function useSpeech(avatarRef: RefObject<AvatarEngine | null>) {
 
   const playBuf = async (arrayBuffer: ArrayBuffer, id: number, onProgress?: (f: number) => void) => {
     const avatar = avatarRef.current; if (!avatar) return;
-    if (!ctxRef.current) ctxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const ctx = ctxRef.current!;
-    if (ctx.state === 'suspended') { try { await ctx.resume(); } catch {} }
+    const ctx = audioCtx();   // shared warm context (kept alive to avoid the Pi's first-sound clipping)
     let audioBuf: AudioBuffer;
     try { audioBuf = await ctx.decodeAudioData(arrayBuffer.slice(0)); } catch { return; }
     if (id !== genRef.current) return;

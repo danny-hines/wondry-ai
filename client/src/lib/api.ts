@@ -19,6 +19,13 @@ export const ttsArrayBuffer = async (text: string, profileId?: string, voice?: s
   } catch { return null; }
 };
 export const getVoices = () => fetch('/api/voices').then(j<{ voices: string[]; available: boolean; browserVoice?: string }>).catch(() => ({ voices: [] as string[], available: false, browserVoice: undefined }));
+// Audio keepalive params (tuned via `wondry audio` or the console); the kiosk applies
+// these on boot and live on change. setAudioConfig broadcasts to the kiosk; testAudio
+// fires a test sound there so you can listen for clipping while tuning.
+export const getAudioConfig = () => fetch('/api/audio').then(j<{ warmHz: number; warmGain: number }>).catch(() => ({ warmHz: 0, warmGain: 0.02 }));
+export const setAudioConfig = (warmHz: number, warmGain: number) =>
+  fetch('/api/audio', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ warmHz, warmGain }) }).then(j<{ warmHz: number; warmGain: number }>);
+export const testAudio = () => fetch('/api/audio/test', { method: 'POST' }).then(j<{ ok: boolean }>).catch(() => ({ ok: false }));
 
 // ----- schedules (device-global timers + wall-clock reminders/alarms) -----
 // Kiosk: just the countdown timers (for the chips).

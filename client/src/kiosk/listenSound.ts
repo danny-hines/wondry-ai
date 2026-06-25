@@ -2,15 +2,7 @@
 // assistant starts and stops listening (like a walkie-talkie). Pure Web Audio —
 // no assets. Start = low→high (rising "I'm listening"); stop = high→low (falling
 // "got it"). Kept short and soft, in the same register as the thinking beeps.
-let ctx: AudioContext | null = null;
-
-function ensureCtx(): AudioContext | null {
-  try {
-    if (!ctx) ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
-    return ctx;
-  } catch { return null; }
-}
+import { audioCtx } from './audio';
 
 // A single beep at frequency `f`, starting at `t0`, lasting `dur` seconds.
 function beep(c: AudioContext, f: number, t0: number, dur: number) {
@@ -32,7 +24,7 @@ const DUR = 0.09;  // each beep ~90ms
 const GAP = 0.1;   // start of beep 2 after start of beep 1
 
 function pair(first: number, second: number) {
-  const c = ensureCtx(); if (!c) return;
+  let c: AudioContext; try { c = audioCtx(); } catch { return; }
   const t0 = c.currentTime + 0.01;
   beep(c, first, t0, DUR);
   beep(c, second, t0 + GAP, DUR);
