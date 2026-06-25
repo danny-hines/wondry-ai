@@ -32,7 +32,10 @@ export class AvatarEngine {
   private COLS = COLS; private ROWS = ROWS;
   private PX: number; private cell: number; private pad: number;
   private buf: Float32Array;
+  private scratch!: Float32Array;                  // off-screen buffer for cross-fade blending
   private mood: Mood = 'idle';
+  private prevMood: Mood = 'idle'; private moodT = 1; // idle<->thinking cross-fade (1 = settled)
+  private blinkV = 1;                                // blink amount, computed once per frame
   private color = '#16b8a6';
   private mouthOpen = 0; private mouthTarget = 0;
   private eyeOffX = 0; private eyeOffXTarget = 0;
@@ -48,6 +51,7 @@ export class AvatarEngine {
     this.ctx = canvas.getContext('2d')!;
     this.PX = canvas.width; this.cell = this.PX / this.COLS; this.pad = this.cell * 0.16;
     this.buf = new Float32Array(this.COLS * this.ROWS);
+    this.scratch = new Float32Array(this.COLS * this.ROWS);
     this.loop = this.loop.bind(this);
     this.raf = requestAnimationFrame(this.loop);
   }
@@ -55,8 +59,15 @@ export class AvatarEngine {
   setColor(c: string) { this.color = c; }
   setMood(m: Mood) {
     if (m === this.mood) return;
-    if (m === 'listening') { this.morph = 'in'; this.morphP = 0; }        // face -> equalizer
-    else if (this.mood === 'listening') { this.morph = 'out'; this.morphP = 0; } // equalizer -> face
+    if (m === 'listening' || this.mood === 'listening') {
+      // face <-> equalizer: the cell-relocation morph
+      this.morph = m === 'listening' ? 'in' : 'out'; this.morphP = 0;
+      this.moodT = 1;                                  // cancel any cross-fade
+    } else {
+      // idle <-> thinking (i.e. thinking -> speaking face): cross-fade the two states
+      this.prevMood = this.mood; this.moodT = 0;
+      this.morph = null;                               // cancel any morph
+    }
     this.mood = m;
     if (!this.speaking) this.mouthTarget = 0;
   }
@@ -95,11 +106,10 @@ export class AvatarEngine {
     const a = PATH[i0], b = PATH[i1];
     return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
   }
-  private eyes(now: number) {
-    const blink = this.blink(now);
+  private eyes(now: number, mood: Mood) {
     let baseH = 1.3, lookY = 0, scanX = 0;
-    if (this.mood === 'thinking') { baseH = 1.1; lookY = -1; scanX = Math.sin(now / 480) * 1.3; }
-    const h = baseH * blink;
+    if (mood === 'thinking') { baseH = 1.1; lookY = -1; scanX = Math.sin(now / 480) * 1.3; }
+    const h = baseH * this.blinkV;
     const ox = Math.round(this.eyeOffX + scanX), oy = Math.round(lookY);
     const cyc = 5 + oy, top = Math.round(cyc - h), bot = Math.round(cyc + h);
     [4, 10].forEach((cx) => this.rect(cx + ox - 1, cx + ox + 1, top, bot, 1));
@@ -145,8 +155,16 @@ export class AvatarEngine {
   private round(x: number, y: number, w: number, h: number, r: number) {
     const c = this.ctx; c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
   }
+  // Draw one mood's cells into this.buf (so the loop can render a single mood, or two
+  // at once when cross-fading by swapping this.buf to the scratch buffer).
+  private renderMood(mood: Mood, now: number) {
+    if (mood === 'listening') this.equalizer(now);
+    else if (mood === 'thinking') { this.eyes(now, mood); this.thinking(now); }
+    else { this.eyes(now, mood); this.mouth(); }
+  }
   private loop(now: number) {
     this.buf.fill(0);
+    this.blinkV = this.blink(now);   // once per frame (cross-fade renders eyes twice)
     this.eqLevel += (this.level - this.eqLevel) * 0.3; this.level *= 0.9; // smooth + decay stale input
     this.mouthOpen += (this.mouthTarget - this.mouthOpen) * 0.45;
     this.eyeOffX += (this.eyeOffXTarget - this.eyeOffX) * 0.08;
@@ -157,12 +175,17 @@ export class AvatarEngine {
       this.drawMorph(this.morph, Math.min(1, this.morphP));
       this.morphP += 0.018;                       // ~0.9s transition
       if (this.morphP >= 1) this.morph = null;
-    } else if (this.mood === 'listening') {
-      this.equalizer(now);
-    } else if (this.mood === 'thinking') {
-      this.eyes(now); this.thinking(now);
+    } else if (this.moodT < 1) {
+      // Cross-fade the previous and current face states (e.g. thinking ring -> speaking
+      // face): render each into a buffer and blend by intensity over ~0.3s.
+      const t = easeInOut(Math.min(1, this.moodT));
+      const main = this.buf;
+      this.scratch.fill(0); this.buf = this.scratch; this.renderMood(this.prevMood, now); this.buf = main;
+      this.buf.fill(0); this.renderMood(this.mood, now);
+      for (let i = 0; i < this.buf.length; i++) this.buf[i] = Math.max(this.buf[i] * t, this.scratch[i] * (1 - t));
+      this.moodT += 0.06;
     } else {
-      this.eyes(now); this.mouth();
+      this.renderMood(this.mood, now);
     }
 
     const breath = 0.93 + 0.07 * (0.5 + 0.5 * Math.sin(now / 1800));
