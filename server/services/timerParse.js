@@ -18,6 +18,15 @@ const UNIT_MS = { sec: 1000, second: 1000, min: 60000, minute: 60000, hour: 3600
 const MIN_MS = 3000;             // floor so "set a timer" with a tiny number isn't instant
 const MAX_MS = 6 * 3600000;      // 6h cap — anything longer is reminder territory
 
+const NUMWORD = 'a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|ninety|hundred';
+const UNIT_RE = 'sec(?:ond)?|min(?:ute)?|hour|hr';
+// A relative-duration phrase: "in 5 minutes", "in half an hour", "for ten minutes".
+// This is what makes something a TIMER ("remind me in 5 minutes") rather than a
+// wall-clock reminder ("remind me at 5"). Used to detect intent and to strip the
+// duration tail out of a label.
+const REL_DURATION = new RegExp(`\\b(?:in|for)\\s+(?:\\d+|${NUMWORD}|half\\s+(?:a|an))\\s*(?:and a half\\s*)?(?:${UNIT_RE})s?\\b`, 'i');
+export function isRelativeDuration(text) { return REL_DURATION.test(text || ''); }
+
 const wordToNum = (w) => (/^\d+$/.test(w) ? parseInt(w, 10) : NUMBER_WORDS[w] ?? null);
 
 // "half" handling: "half a minute"/"half an hour" → 0.5 of the unit.
@@ -44,10 +53,13 @@ function parseDuration(text) {
 // cookies out"). The greedy `.*` skips past the duration's own "for 10 minutes" to
 // the LAST "to"/"for"; if that tail is itself just a duration, it's not a label.
 function parseLabel(text) {
-  let m = text.match(/.*\bto\s+(.{2,60}?)\s*$/i);
-  if (!m) m = text.match(/.*\bfor\s+(.{2,60}?)\s*$/i);
+  let m = text.match(/.*\bto\s+(.{2,80}?)\s*$/i);
+  if (!m) m = text.match(/.*\bfor\s+(.{2,80}?)\s*$/i);
   if (!m) return null;
-  const label = m[1].trim().replace(/[.?!,]+$/, '');
+  let label = m[1].trim().replace(/[.?!,]+$/, '');
+  // Drop a trailing duration that belongs to the timer, not the label
+  // ("water the plants in 1 minute" → "water the plants").
+  label = label.replace(REL_DURATION, '').replace(/\s{2,}/g, ' ').trim();
   if (!label || parseDuration(label) != null) return null;   // the tail was the duration, not a label
   return label;
 }
@@ -63,11 +75,13 @@ export function parseTimer(textRaw) {
     return { action: 'cancel' };
   }
 
-  // Set: must mention a timer (or "set ... for <duration>") AND have a parseable duration.
+  // Set: either the word "timer" with a duration, OR a request phrased with a relative
+  // duration ("remind me in 5 minutes", "wake me in 1 minute") — those are countdowns,
+  // not wall-clock reminders. Absolute clock times ("at 5pm") fail the relative test
+  // and fall through to the reminder parser.
   const mentionsTimer = /\btimers?\b/.test(low);
-  const setVerb = /\b(set|start|make|put|create|give me)\b/.test(low);
-  if (!mentionsTimer && !setVerb) return null;
-  if (!mentionsTimer) return null;   // require the word "timer" to avoid hijacking other turns
+  const request = /\b(set|start|make|put|create|give me|remind me|wake me|alarm)\b/.test(low);
+  if (!mentionsTimer && !(request && REL_DURATION.test(low))) return null;
 
   const durationMs = parseDuration(low);
   if (durationMs == null) return null;

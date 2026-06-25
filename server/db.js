@@ -29,13 +29,29 @@ function dropColumn(table, col) {
 }
 
 export function initSchema() {
-  // One-time: timers became device-global (no profile_id). Drop the old per-child
-  // table so the CREATE below rebuilds the new shape. The feature never shipped, so
-  // any rows are throwaway dev data. PRAGMA on a missing table returns [] (no error).
+  // Timers generalized into `schedules` (timers + wall-clock reminders/alarms).
+  // reminders carry no duration, so schedules.duration_ms must be nullable — but the
+  // old `timers` table (and an in-place-renamed `schedules` from an earlier build) had
+  // it NOT NULL. Normalize by stashing whatever exists into `_schedules_migrate`, let
+  // the canonical CREATE below rebuild the nullable shape, then column-aware copy the
+  // rows back (post-copy further down). PRAGMA on a missing table returns [] (no error).
   try {
-    const cols = db.prepare('PRAGMA table_info(timers)').all().map((c) => c.name);
-    if (cols.includes('profile_id')) db.exec('DROP TABLE IF EXISTS timers');
-  } catch { /* no timers table yet */ }
+    const names = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map((r) => r.name);
+    const notNull = (table, col) => {
+      const c = db.prepare(`PRAGMA table_info(${table})`).all().find((x) => x.name === col);
+      return c ? !!c.notnull : false;
+    };
+    if (!names.includes('_schedules_migrate')) {
+      if (names.includes('timers') && !names.includes('schedules')) {
+        const cols = db.prepare('PRAGMA table_info(timers)').all().map((c) => c.name);
+        if (cols.includes('profile_id')) db.exec('DROP TABLE IF EXISTS timers');   // ancient per-child → throwaway
+        else db.exec('DROP INDEX IF EXISTS idx_timers_status; ALTER TABLE timers RENAME TO _schedules_migrate');
+      } else if (names.includes('schedules') && notNull('schedules', 'duration_ms')) {
+        // Earlier build renamed timers→schedules in place, keeping duration_ms NOT NULL.
+        db.exec('DROP INDEX IF EXISTS idx_schedules_status; ALTER TABLE schedules RENAME TO _schedules_migrate');
+      }
+    }
+  } catch { /* no timers/schedules table yet */ }
   db.exec(`
     CREATE TABLE IF NOT EXISTS profiles (
       id TEXT PRIMARY KEY, name TEXT NOT NULL, initials TEXT NOT NULL, color TEXT NOT NULL,
@@ -97,16 +113,19 @@ export function initSchema() {
       cost_usd REAL NOT NULL DEFAULT 0, created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_usage_created ON api_usage(created_at);
-    -- Countdown timers (and, later, reminders). Device-global, not per child — a
-    -- shared kiosk timer like a kitchen timer. fire_at is the absolute epoch-ms
-    -- deadline so a timer survives a restart; the scheduler re-arms pending rows on
-    -- boot. status: pending | fired | cancelled. created_by: voice (kiosk) | parent.
-    CREATE TABLE IF NOT EXISTS timers (
-      id TEXT PRIMARY KEY, label TEXT, duration_ms INTEGER NOT NULL, fire_at INTEGER NOT NULL,
+    -- Scheduled things that fire at an absolute time: countdown timers and wall-clock
+    -- reminders/alarms. Device-global (a shared kiosk, not per child). fire_at is the
+    -- absolute epoch-ms deadline so it survives a restart; the scheduler re-arms
+    -- pending rows on boot. kind: timer | reminder. message: spoken on a reminder fire.
+    -- recurrence: null (one-time) for now; reserved for daily/weekday repeats.
+    -- duration_ms only meaningful for timers. status: pending | fired | cancelled.
+    CREATE TABLE IF NOT EXISTS schedules (
+      id TEXT PRIMARY KEY, kind TEXT NOT NULL DEFAULT 'timer', label TEXT, message TEXT,
+      duration_ms INTEGER, fire_at INTEGER NOT NULL, recurrence TEXT,
       status TEXT NOT NULL DEFAULT 'pending', created_by TEXT NOT NULL DEFAULT 'voice',
       created_at INTEGER NOT NULL, fired_at INTEGER
     );
-    CREATE INDEX IF NOT EXISTS idx_timers_status ON timers(status);
+    CREATE INDEX IF NOT EXISTS idx_schedules_status ON schedules(status);
     CREATE TABLE IF NOT EXISTS config_kv ( key TEXT PRIMARY KEY, value TEXT );
     CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_id);
     CREATE INDEX IF NOT EXISTS idx_artifacts_profile ON artifacts(profile_id);
@@ -124,6 +143,24 @@ export function initSchema() {
   ensureColumn('artifacts', 'type', "TEXT NOT NULL DEFAULT 'page'");
   // content types turned OFF for this child (comma-separated type ids).
   ensureColumn('profiles', 'disabled_types', 'TEXT');
+  // reminder fields (defensive — the canonical CREATE already includes them).
+  ensureColumn('schedules', 'kind', "TEXT NOT NULL DEFAULT 'timer'");
+  ensureColumn('schedules', 'message', 'TEXT');
+  ensureColumn('schedules', 'recurrence', 'TEXT');
+  // Post-copy the stashed rows into the rebuilt (nullable) schedules, then drop the
+  // stash. Column-aware so it works whether the stash is the old `timers` shape (no
+  // kind/message/recurrence) or a half-migrated `schedules` shape (has them): present
+  // columns copy across, an absent `kind` defaults to 'timer', other absent ones null.
+  try {
+    const has = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='_schedules_migrate'").get();
+    if (has) {
+      const src = new Set(db.prepare('PRAGMA table_info(_schedules_migrate)').all().map((c) => c.name));
+      const dest = ['id', 'kind', 'label', 'message', 'duration_ms', 'fire_at', 'recurrence', 'status', 'created_by', 'created_at', 'fired_at'];
+      const exprs = dest.map((c) => (src.has(c) ? c : c === 'kind' ? "'timer'" : 'NULL'));
+      db.exec(`INSERT INTO schedules (${dest.join(',')}) SELECT ${exprs.join(',')} FROM _schedules_migrate;
+               DROP TABLE _schedules_migrate;`);
+    }
+  } catch { /* nothing to migrate */ }
   // attribute LLM usage to the artifact it generated (added after api_usage shipped).
   ensureColumn('api_usage', 'artifact_id', 'TEXT');
   db.exec('CREATE INDEX IF NOT EXISTS idx_usage_artifact ON api_usage(artifact_id)');
@@ -189,23 +226,29 @@ export function usageByModel(ts) {
     FROM api_usage WHERE created_at >= ? GROUP BY model ORDER BY cost DESC`).all(ts);
 }
 
-// --- timers (device-global countdown timers; reminders later) ---
-export function createTimerRow({ label, durationMs, fireAt, createdBy = 'voice' }) {
+// --- schedules (device-global timers + wall-clock reminders/alarms) ---
+export function createScheduleRow({ kind = 'timer', label = null, message = null, durationMs = null, fireAt, recurrence = null, createdBy = 'voice' }) {
   const id = uid();
-  db.prepare(`INSERT INTO timers (id,label,duration_ms,fire_at,status,created_by,created_at)
-              VALUES (?,?,?,?, 'pending', ?, ?)`)
-    .run(id, label ?? null, Math.round(durationMs), Math.round(fireAt), createdBy, now());
-  return getTimerRow(id);
+  db.prepare(`INSERT INTO schedules (id,kind,label,message,duration_ms,fire_at,recurrence,status,created_by,created_at)
+              VALUES (?,?,?,?,?,?,?, 'pending', ?, ?)`)
+    .run(id, kind, label, message, durationMs == null ? null : Math.round(durationMs),
+         Math.round(fireAt), recurrence, createdBy, now());
+  return getScheduleRow(id);
 }
-export function getTimerRow(id) { return db.prepare('SELECT * FROM timers WHERE id=?').get(id); }
-// All pending timers, soonest first — drives the kiosk's countdown chips and the
-// boot re-arm. Not scoped to a child: timers belong to the device, not a profile.
-export function activeTimers() {
-  return db.prepare("SELECT * FROM timers WHERE status='pending' ORDER BY fire_at ASC").all();
+export function getScheduleRow(id) { return db.prepare('SELECT * FROM schedules WHERE id=?').get(id); }
+// All pending schedules, soonest first — drives the kiosk's countdown chips, the
+// console list, and the boot re-arm. Device-global, not scoped to a profile.
+export function activeSchedules() {
+  return db.prepare("SELECT * FROM schedules WHERE status='pending' ORDER BY fire_at ASC").all();
 }
-export function setTimerStatus(id, status, firedAt = null) {
-  db.prepare('UPDATE timers SET status=?, fired_at=? WHERE id=?').run(status, firedAt, id);
-  return getTimerRow(id);
+export function setScheduleStatus(id, status, firedAt = null) {
+  db.prepare('UPDATE schedules SET status=?, fired_at=? WHERE id=?').run(status, firedAt, id);
+  return getScheduleRow(id);
+}
+// Re-arm a recurring schedule at its next occurrence (keeps the same row pending).
+export function rescheduleRow(id, fireAt) {
+  db.prepare("UPDATE schedules SET fire_at=?, status='pending', fired_at=NULL WHERE id=?").run(Math.round(fireAt), id);
+  return getScheduleRow(id);
 }
 
 export function getKV(key, fallback = null) {

@@ -8,10 +8,10 @@ import { startThinkingSound, stopThinkingSound } from './thinkingSound';
 import { playStartListening, playStopListening } from './listenSound';
 import { playAlarm } from './alarmSound';
 import { rendererFor } from '../content/registry';
-import { getProfiles, getTray, postTurn, markEngagement, getTimers, cancelTimer } from '../lib/api';
+import { getProfiles, getTray, postTurn, markEngagement, getTimers, cancelSchedule } from '../lib/api';
 import { mdToHtml } from '../lib/markdown';
 import { readableOn } from '../lib/contrast';
-import type { Profile, Artifact, WSMessage, ActiveTimer } from '../lib/types';
+import type { Profile, Artifact, WSMessage, ScheduleItem } from '../lib/types';
 import './kiosk.css';
 
 const IDLE_MS = 2 * 60 * 1000;
@@ -36,7 +36,7 @@ export default function Kiosk() {
   const [toast, setToast] = useState<{ text: string; onClick: () => void } | null>(null);
   const [prompt, setPrompt] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
-  const [timers, setTimers] = useState<ActiveTimer[]>([]);
+  const [timers, setTimers] = useState<ScheduleItem[]>([]);
   const [nowTick, setNowTick] = useState(() => Date.now());
 
   const avatarRef = useRef<AvatarEngine | null>(null);
@@ -83,7 +83,7 @@ export default function Kiosk() {
 
   // Tap a chip to cancel; optimistic-remove, then tell the server (which broadcasts
   // a timer.cancelled the other views pick up — harmless if it races our removal).
-  const dismissTimer = (id: string) => { setTimers((p) => p.filter((t) => t.id !== id)); cancelTimer(id); };
+  const dismissTimer = (id: string) => { setTimers((p) => p.filter((t) => t.id !== id)); cancelSchedule(id); };
 
   useEffect(() => {
     let ws: WebSocket;
@@ -93,11 +93,13 @@ export default function Kiosk() {
       ws.onmessage = (m) => {
         let evt: WSMessage; try { evt = JSON.parse(m.data); } catch { return; }
         const a = evt.artifact; const u = userRef.current;
-        // Timers are device-global — show/fire them whoever's currently active.
-        if (evt.type.startsWith('timer.') && evt.timer) {
-          if (evt.type === 'timer.created') setTimers((p) => p.some((t) => t.id === evt.timer!.id) ? p : [...p, evt.timer!].sort((x, y) => x.fire_at - y.fire_at));
-          else if (evt.type === 'timer.cancelled') setTimers((p) => p.filter((t) => t.id !== evt.timer!.id));
-          else if (evt.type === 'timer.fired') { setTimers((p) => p.filter((t) => t.id !== evt.timer!.id)); fireTimer(evt.timer); }
+        // Schedules are device-global — show/fire them whoever's currently active. The
+        // chips show countdown timers only; reminders just fire (announce) when due.
+        if (evt.type.startsWith('schedule.') && evt.schedule) {
+          const s = evt.schedule;
+          if (evt.type === 'schedule.created') { if (s.kind === 'timer') setTimers((p) => p.some((t) => t.id === s.id) ? p : [...p, s].sort((x, y) => x.fire_at - y.fire_at)); }
+          else if (evt.type === 'schedule.cancelled') setTimers((p) => p.filter((t) => t.id !== s.id));
+          else if (evt.type === 'schedule.fired') { setTimers((p) => p.filter((t) => t.id !== s.id)); fireSchedule(s); }
           return;
         }
         if (a && u && !(a.profile_id === u.id || a.profile_id == null)) { if (evt.type !== 'hello') refreshTray(); return; }
@@ -134,18 +136,24 @@ export default function Kiosk() {
     }
   };
 
-  // A timer went off: sound the alarm, wake the avatar (even from idle), and have it
-  // announce. Reuses the speak/idle machinery the wake word and greeting already use.
-  const fireTimer = (timer: ActiveTimer) => {
+  // A timer or reminder went off: sound the alarm, wake the avatar (even from idle),
+  // and have it announce. Reuses the speak/idle machinery the wake word and greeting
+  // already use. Timers report the duration; reminders speak their message.
+  const fireSchedule = (s: ScheduleItem) => {
     const u = userRef.current;
     playAlarm();
     if (viewRef.current === 'idle') { setView('conversation'); setHintSeen(true); }
     bumpIdle();
-    const line = timer.label
-      ? `Ding ding! Time to ${timer.label}!`
-      : `Ding ding ding! Your ${timer.pretty} timer is done!`;
+    let line: string, toast: string;
+    if (s.kind === 'reminder') {
+      line = s.message ? `Ding ding! Time to ${s.message}!` : "Ding ding! Here's your reminder!";
+      toast = `🔔 ${s.message || 'Reminder'}`;
+    } else {
+      line = s.label ? `Ding ding! Time to ${s.label}!` : `Ding ding ding! Your ${s.pretty} timer is done!`;
+      toast = `⏰ ${s.label || `${s.pretty} timer`} — done!`;
+    }
     speak(line, u?.id);
-    setToast({ text: `⏰ ${timer.label ? timer.label : `${timer.pretty} timer`} — done!`, onClick: () => {} });
+    setToast({ text: toast, onClick: () => {} });
     setTimeout(() => setToast(null), 8000);
   };
 

@@ -1,4 +1,4 @@
-import type { Profile, TurnResponse, TrayResponse, Artifact, AdminConfig, LogMessage, SafetyEntry, ReadingAttempt, ReadingReportRow, ContentTypeManifest, UsageReport, ActiveTimer } from './types';
+import type { Profile, TurnResponse, TrayResponse, Artifact, AdminConfig, LogMessage, SafetyEntry, ReadingAttempt, ReadingReportRow, ContentTypeManifest, UsageReport, ScheduleItem } from './types';
 
 const j = <T>(r: Response): Promise<T> => r.json() as Promise<T>;
 
@@ -20,13 +20,20 @@ export const ttsArrayBuffer = async (text: string, profileId?: string, voice?: s
 };
 export const getVoices = () => fetch('/api/voices').then(j<{ voices: string[]; available: boolean; browserVoice?: string }>).catch(() => ({ voices: [] as string[], available: false, browserVoice: undefined }));
 
-// ----- timers (device-global countdown timers; reminders later) -----
+// ----- schedules (device-global timers + wall-clock reminders/alarms) -----
+// Kiosk: just the countdown timers (for the chips).
 export const getTimers = () =>
-  fetch('/api/timers').then(j<{ timers: ActiveTimer[] }>).catch(() => ({ timers: [] as ActiveTimer[] }));
+  fetch('/api/timers').then(j<{ timers: ScheduleItem[] }>).catch(() => ({ timers: [] as ScheduleItem[] }));
+// Console: every active schedule (timers + reminders).
+export const getSchedules = () =>
+  fetch('/api/schedules').then(j<{ schedules: ScheduleItem[] }>).catch(() => ({ schedules: [] as ScheduleItem[] }));
 export const createTimer = (durationMs: number, label?: string | null, createdBy: 'voice' | 'parent' = 'voice') =>
-  fetch('/api/timers', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ durationMs, label, createdBy }) }).then(j<{ timer: ActiveTimer }>);
-export const cancelTimer = (id: string) =>
-  fetch(`/api/timers/${id}/cancel`, { method: 'POST' }).then(j<{ timer: ActiveTimer }>).catch(() => null);
+  fetch('/api/timers', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ durationMs, label, createdBy }) }).then(j<{ schedule: ScheduleItem }>);
+// atLocal is a datetime-local value ("YYYY-MM-DDTHH:mm"); the server reads it in the configured timezone.
+export const createReminder = (atLocal: string, message?: string | null, label?: string | null) =>
+  fetch('/api/reminders', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ atLocal, message, label, createdBy: 'parent' }) }).then(j<{ schedule: ScheduleItem; error?: string }>);
+export const cancelSchedule = (id: string) =>
+  fetch(`/api/schedules/${id}/cancel`, { method: 'POST' }).then(j<{ schedule: ScheduleItem }>).catch(() => null);
 
 // ----- kiosk parent controls (PIN-gated update/reload from the touchscreen) -----
 export const getHealth = () => fetch('/api/health').then(j<{ ok: boolean; boot?: number; managed?: boolean; liveGeneration?: boolean; tts?: boolean }>);
@@ -60,7 +67,7 @@ export class AdminApi {
   private req(path: string, opts: RequestInit = {}) { return fetch('/api/admin' + path, { ...opts, headers: { ...this.h(), ...(opts.headers || {}) } }); }
   async ok(): Promise<boolean> { return (await this.req('/config')).ok; }
   config = () => this.req('/config').then(j<AdminConfig>);
-  saveConfig = (body: { systemPrompt?: string; chatSystemPrompt?: string; readingSystemPrompt?: string; richness?: string; dailyCap?: number; wake?: { enabled?: boolean; phrase?: string }; kioskPin?: string }) => this.req('/config', { method: 'POST', body: JSON.stringify(body) });
+  saveConfig = (body: { systemPrompt?: string; chatSystemPrompt?: string; readingSystemPrompt?: string; richness?: string; dailyCap?: number; wake?: { enabled?: boolean; phrase?: string }; kioskPin?: string; timezone?: string }) => this.req('/config', { method: 'POST', body: JSON.stringify(body) });
   log = () => this.req('/log').then(j<{ messages: LogMessage[]; safety: SafetyEntry[] }>);
   artifacts = () => this.req('/artifacts').then(j<{ artifacts: Artifact[]; kids: Profile[] }>);
   setAudience = (id: string, profileId: string, on: boolean) => this.req(`/artifacts/${id}/audience`, { method: 'POST', body: JSON.stringify({ profileId, on }) });

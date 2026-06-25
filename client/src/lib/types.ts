@@ -64,16 +64,17 @@ export interface ReadingReportRow {
   count: number; avg: number | null; recentAvg: number | null; recentCount: number;
   missWords: { word: string; n: number }[];
 }
-// A device-global countdown timer (and later, reminder) — set by voice or a parent.
-export interface ActiveTimer {
-  id: string; label: string | null;
-  duration_ms: number; fire_at: number;
+// A device-global scheduled item: a countdown timer or a wall-clock reminder/alarm.
+export interface ScheduleItem {
+  id: string; kind: 'timer' | 'reminder'; label: string | null; message: string | null;
+  duration_ms: number | null; fire_at: number; recurrence: string | null;
   status: 'pending' | 'fired' | 'cancelled'; created_by: 'voice' | 'parent';
-  pretty: string;   // human duration, e.g. "5 minutes"
+  pretty: string | null;   // human duration for timers, e.g. "5 minutes"
+  when: string;            // friendly fire time for reminders, e.g. "Today 7:00 PM"
 }
 export interface TurnResponse {
-  kind: 'chat' | 'artifact' | 'timer'; reply: string;
-  artifactId?: string; artifact?: Artifact; blocked?: boolean; timer?: ActiveTimer;
+  kind: 'chat' | 'artifact' | 'timer' | 'reminder'; reply: string;
+  artifactId?: string; artifact?: Artifact; blocked?: boolean; timer?: ScheduleItem; reminder?: ScheduleItem;
 }
 export interface TrayResponse { artifacts: Artifact[]; unseen: number; }
 export interface UsageBucket { cost: number; inTok: number; outTok: number; n: number; }
@@ -90,6 +91,7 @@ export interface AdminConfig {
   readingSystemPrompt: string; defaultReadingSystemPrompt: string;
   routing: Record<string, string>; providers: string[]; liveGeneration: boolean;
   richness: RichnessConfig; wake: WakeConfig; kioskPin: string;
+  timezone: string; detectedTimezone: string; timezones: string[]; serverTime: number;
 }
 export interface LogMessage {
   id: string; role: string; kind: string; text: string; created_at: number;
@@ -97,4 +99,4 @@ export interface LogMessage {
   artifact_title?: string | null; safety_flag: number;
 }
 export interface SafetyEntry { id: string; verdict: string; reason: string | null; sample: string | null; created_at: number; }
-export interface WSMessage { type: string; artifact?: Artifact; timer?: ActiveTimer; at: number; announce?: boolean; state?: 'present' | 'absent'; changed?: boolean; }
+export interface WSMessage { type: string; artifact?: Artifact; schedule?: ScheduleItem; at: number; announce?: boolean; state?: 'present' | 'absent'; changed?: boolean; }

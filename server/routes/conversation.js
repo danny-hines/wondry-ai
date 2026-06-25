@@ -10,7 +10,9 @@ import { enabledTypes, isTypeEnabled } from '../content/registry.js';
 import '../content/index.js'; // ensure content types are registered
 import { getChatSystemPrompt, INTENT_SYSTEM_PROMPT, RESOLVE_TOPIC_SYSTEM_PROMPT } from '../services/systemPrompt.js';
 import { parseTimer, formatDuration } from '../services/timerParse.js';
-import { startTimer, cancelTimer, listActiveTimers } from '../services/scheduler.js';
+import { parseReminder } from '../services/reminderParse.js';
+import { startTimer, startReminder, cancelSchedule, listActiveTimers, listActiveSchedules } from '../services/scheduler.js';
+import { nextEpochForLocalTime, formatWhen, getTimezone, describeNow } from '../services/timezone.js';
 
 export const router = express.Router();
 
@@ -78,6 +80,44 @@ async function startArtifactTurn(convId, profile, topic, reply) {
   return { kind: 'artifact', reply, artifactId, artifact: getArtifact(artifactId) };
 }
 
+// Timer + reminder responders, shared by the fast-path regex and the LLM intent
+// fallback so both produce identical behavior. Each creates the schedule (the
+// scheduler fires it over WS later), records the avatar line, and sends the turn.
+const TIMER_MIN_MS = 3000, TIMER_MAX_MS = 6 * 3600000;
+function respondTimer(res, convId, profileId, durationMs, label) {
+  durationMs = Math.max(TIMER_MIN_MS, Math.min(TIMER_MAX_MS, Math.round(durationMs)));
+  const timer = startTimer({ durationMs, label: label || null, createdBy: 'voice' });
+  const pretty = formatDuration(durationMs);
+  const reply = label
+    ? `Okay! I'll remind you to ${label} in ${pretty}.`
+    : `Okay! Timer set for ${pretty}. I'll let you know when it's done!`;
+  addMessage(convId, profileId, 'avatar', reply, 'text');
+  return res.json({ kind: 'timer', reply, timer });
+}
+// Returns the sent response, or null if no concrete future time could be resolved
+// (so the caller falls through to chat).
+const WEEKDAY_ABBR = { sunday: 'Sun', monday: 'Mon', tuesday: 'Tue', wednesday: 'Wed', thursday: 'Thu', friday: 'Fri', saturday: 'Sat' };
+function normalizeDay(d) {
+  if (!d) return null;
+  const s = String(d).toLowerCase();
+  if (s === 'today') return null;                    // resolver treats null as today
+  if (s === 'tomorrow') return 'tomorrow';
+  if (WEEKDAY_ABBR[s]) return WEEKDAY_ABBR[s];
+  return Object.values(WEEKDAY_ABBR).find((a) => a.toLowerCase() === s) || null;  // already an abbrev
+}
+function respondReminder(res, convId, profileId, req) {
+  const tz = getTimezone();
+  const fireAt = nextEpochForLocalTime({ ...req, day: normalizeDay(req.day) }, tz);
+  if (fireAt == null) return null;
+  const reminder = startReminder({ fireAt, message: req.message || null, createdBy: 'voice' });
+  const when = formatWhen(fireAt, tz);
+  const reply = req.message
+    ? `Okay! I'll remind you to ${req.message} ${when}.`
+    : `Okay! Alarm set for ${when}.`;
+  addMessage(convId, profileId, 'avatar', reply, 'text');
+  return res.json({ kind: 'reminder', reply, reminder });
+}
+
 router.post('/turn', async (req, res) => {
   const { profileId, text } = req.body || {};
   const profile = db.prepare('SELECT * FROM profiles WHERE id=?').get(profileId);
@@ -109,18 +149,29 @@ router.post('/turn', async (req, res) => {
     pendingOffers.delete(convId);
     if (timerReq.action === 'cancel') {
       const active = listActiveTimers();
-      active.forEach((t) => cancelTimer(t.id));
+      active.forEach((t) => cancelSchedule(t.id));
       const reply = active.length ? 'Okay, I stopped your timer.' : "You don't have a timer running right now.";
       addMessage(convId, profileId, 'avatar', reply);
       return res.json({ kind: 'timer', reply });
     }
-    const timer = startTimer({ durationMs: timerReq.durationMs, label: timerReq.label, createdBy: 'voice' });
-    const pretty = formatDuration(timerReq.durationMs);
-    const reply = timerReq.label
-      ? `Okay! I'll remind you to ${timerReq.label} in ${pretty}.`
-      : `Okay! Timer set for ${pretty}. I'll let you know when it's done!`;
-    addMessage(convId, profileId, 'avatar', reply, 'text');
-    return res.json({ kind: 'timer', reply, timer });
+    return respondTimer(res, convId, profileId, timerReq.durationMs, timerReq.label);
+  }
+
+  // 1.3) reminder/alarm at a wall-clock time? "remind me to feed the fish at 5pm",
+  // "set an alarm for 7am", "cancel my alarm". Resolved to the next future epoch in
+  // the configured timezone; the scheduler announces it when it fires.
+  const remReq = parseReminder(text);
+  if (remReq) {
+    pendingOffers.delete(convId);
+    if (remReq.action === 'cancel') {
+      const active = listActiveSchedules().filter((s) => s.kind === 'reminder');
+      active.forEach((s) => cancelSchedule(s.id));
+      const reply = active.length ? 'Okay, I cancelled your reminder.' : "You don't have any reminders set right now.";
+      addMessage(convId, profileId, 'avatar', reply);
+      return res.json({ kind: 'reminder', reply });
+    }
+    const sent = respondReminder(res, convId, profileId, remReq);
+    if (sent) return sent;   // else couldn't resolve a future time — fall through to chat
   }
 
   // 1.5) does an enabled content type claim this utterance? (reading, flashcards,
@@ -138,10 +189,26 @@ router.post('/turn', async (req, res) => {
     return res.json({ kind: 'artifact', reply, artifactId, artifact: getArtifact(artifactId) });
   }
 
-  // 2) explicit request to build a page? (intent sees history; topic resolves references)
-  let intent = 'chat';
-  try { intent = (JSON.parse(await runText('intent', { system: INTENT_SYSTEM_PROMPT, prompt: text, history })).intent) || 'chat'; }
-  catch { intent = /\b(make|build|show|create|draw) (me )?(a |an )?(page|game|lesson|quiz|story|activity|picture)/i.test(text) ? 'artifact' : 'chat'; }
+  // 2) LLM intent: one classify-and-extract call routes the utterance to chat /
+  // artifact / timer / reminder with params — the long-tail catch for phrasings the
+  // fast-path regex above missed (e.g. "can you wake me a quarter past six"). It's a
+  // single classification call, not native tool use: our code acts on the result;
+  // the model never sees a tool result. Current local time lets it infer am/pm + day.
+  let intentObj = { intent: 'chat' };
+  try {
+    const sys = `${INTENT_SYSTEM_PROMPT}\n\nThe current local time is ${describeNow(getTimezone())}.`;
+    intentObj = JSON.parse(await runText('intent', { system: sys, prompt: text, history })) || { intent: 'chat' };
+  } catch { intentObj = { intent: /\b(make|build|show|create|draw) (me )?(a |an )?(page|game|lesson|quiz|story|activity|picture)/i.test(text) ? 'artifact' : 'chat' }; }
+  const intent = intentObj.intent || 'chat';
+  if (intent === 'timer' && Number(intentObj.durationSeconds) > 0) {
+    pendingOffers.delete(convId);
+    return respondTimer(res, convId, profileId, Number(intentObj.durationSeconds) * 1000, intentObj.label);
+  }
+  if (intent === 'reminder') {
+    pendingOffers.delete(convId);
+    const sent = respondReminder(res, convId, profileId, intentObj);
+    if (sent) return sent;   // else fall through to chat
+  }
   if (intent === 'artifact' && isTypeEnabled('page') && !offForKid.has('page')) {
     pendingOffers.delete(convId);
     const topic = await resolveTopic(text, history);

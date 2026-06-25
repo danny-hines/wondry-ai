@@ -34,6 +34,27 @@ test('does not mistake the duration phrase for a label', () => {
   assert.equal(parseTimer('set a timer for five minutes').label, null);
 });
 
+test('relative "in N minutes" is a timer even without the word "timer"', () => {
+  assert.equal(parseTimer('remind me in 5 minutes').durationMs, 5 * MIN);
+  assert.equal(parseTimer('wake me in 1 minute').durationMs, MIN);
+  const r = parseTimer('remind me in 5 minutes to come inside');
+  assert.equal(r.durationMs, 5 * MIN);
+  assert.equal(r.label, 'come inside');
+});
+
+test('"set a reminder to X in N minutes" → timer with clean label', () => {
+  const r = parseTimer('set a reminder to water the plants in 1 minute');
+  assert.equal(r.action, 'set');
+  assert.equal(r.durationMs, MIN);
+  assert.equal(r.label, 'water the plants');   // not "water the plants in 1 minute"
+});
+
+test('absolute clock times are NOT timers (fall through to reminder parser)', () => {
+  assert.equal(parseTimer('remind me at 5pm to feed the fish'), null);
+  assert.equal(parseTimer('set an alarm for 7am'), null);
+  assert.equal(parseTimer('wake me up at 6'), null);
+});
+
 test('cancel phrasings', () => {
   assert.deepEqual(parseTimer('cancel my timer'), { action: 'cancel' });
   assert.deepEqual(parseTimer('stop the timer'), { action: 'cancel' });

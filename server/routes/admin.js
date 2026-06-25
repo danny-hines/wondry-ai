@@ -7,6 +7,7 @@ import { selectedTierId, dailyCap } from '../services/richness.js';
 import { startGeneration, startReadingGeneration, createArtifact, getArtifact, artifactPath } from '../services/generator.js';
 import { getType, manifests, setTypeEnabled } from '../content/registry.js';
 import { getWakeConfig, setWakeConfig } from '../services/wake.js';
+import { getTimezone, setTimezone, detectedTimezone, supportedTimezones } from '../services/timezone.js';
 import '../content/index.js'; // ensure content types are registered
 import {
   getArtifactSystemPrompt, DEFAULT_ARTIFACT_SYSTEM_PROMPT,
@@ -180,6 +181,12 @@ router.get('/config', (req, res) => {
     liveGeneration: liveGenerationEnabled(),
     wake: getWakeConfig(),
     kioskPin: getKV('kiosk_pin', '0000'),
+    // Scheduling clock: the configured zone, the OS-detected default, the full IANA
+    // list for the picker, and current server time so a skewed OS clock is visible.
+    timezone: getTimezone(),
+    detectedTimezone: detectedTimezone(),
+    timezones: supportedTimezones(),
+    serverTime: Date.now(),
     richness: {
       selected: selectedTierId(),
       default: r.default || 'standard',
@@ -192,7 +199,7 @@ router.get('/config', (req, res) => {
 });
 
 router.post('/config', (req, res) => {
-  const { systemPrompt, chatSystemPrompt, readingSystemPrompt, richness, dailyCap: cap, wake, kioskPin } = req.body || {};
+  const { systemPrompt, chatSystemPrompt, readingSystemPrompt, richness, dailyCap: cap, wake, kioskPin, timezone } = req.body || {};
   if (typeof systemPrompt === 'string') setKV('artifact_system_prompt', systemPrompt);
   if (typeof chatSystemPrompt === 'string') setKV('chat_system_prompt', chatSystemPrompt);
   if (typeof readingSystemPrompt === 'string') setKV('reading_system_prompt', readingSystemPrompt);
@@ -200,6 +207,7 @@ router.post('/config', (req, res) => {
   if (cap !== undefined && cap !== null && cap !== '') setKV('richness_daily_cap', String(Math.max(0, parseInt(cap, 10) || 0)));
   if (wake && typeof wake === 'object') setWakeConfig(wake);
   if (typeof kioskPin === 'string' && /^\d{4}$/.test(kioskPin)) setKV('kiosk_pin', kioskPin);
+  if (typeof timezone === 'string') { try { setTimezone(timezone); } catch { return res.status(400).json({ error: 'invalid timezone' }); } }
   res.json({ ok: true });
 });
 

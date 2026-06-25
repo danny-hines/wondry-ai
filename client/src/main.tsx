@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
 import Kiosk from './kiosk/Kiosk';
 import Admin from './admin/Admin';
-import { Log, Content, Kids, Reading, Timers, Settings } from './admin/pages';
+import { Log, Content, Kids, Reading, Scheduling, Settings } from './admin/pages';
 import Preview from './admin/Preview';
 import './index.css';
 
@@ -18,7 +18,8 @@ const router = createBrowserRouter([
       { path: 'pages', element: <Navigate to="/admin/content" replace /> },
       { path: 'create', element: <Navigate to="/admin/content" replace /> },
       { path: 'kids', element: <Kids /> },
-      { path: 'timers', element: <Timers /> },
+      { path: 'schedule', element: <Scheduling /> },
+      { path: 'timers', element: <Navigate to="/admin/schedule" replace /> },
       { path: 'reading', element: <Reading /> },
       { path: 'settings', element: <Settings /> },
     ],

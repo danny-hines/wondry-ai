@@ -16,7 +16,7 @@ import tts from './routes/tts.js';
 import presence from './routes/presence.js';
 import wake from './routes/wake.js';
 import kiosk, { isManaged } from './routes/kiosk.js';
-import timers from './routes/timers.js';
+import schedule from './routes/schedule.js';
 import { ttsAvailable, ensureServer } from './services/tts.js';
 import { initScheduler } from './services/scheduler.js';
 
@@ -38,7 +38,7 @@ app.use('/api', tts);
 app.use('/api', presence);
 app.use('/api', wake);
 app.use('/api', kiosk);
-app.use('/api', timers);
+app.use('/api', schedule);
 app.use('/api/admin', admin);
 
 app.get('/api/health', (req, res) =>
