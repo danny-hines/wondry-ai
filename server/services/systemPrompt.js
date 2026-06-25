@@ -75,7 +75,19 @@ STYLE: bright, friendly, rounded, high-contrast, large fonts. Feel like a deligh
 export function getArtifactSystemPrompt() { return getKV('artifact_system_prompt', DEFAULT_ARTIFACT_SYSTEM_PROMPT); }
 
 // ---- Resolve a concrete artifact topic from context (pronoun references) ----
-export const RESOLVE_TOPIC_SYSTEM_PROMPT = `From the conversation, the child wants an interactive learning page. Reply with ONLY a short topic phrase (2-5 words) naming what the page should be about. Resolve references like "that", "it", or "this" to the actual subject discussed. No punctuation, no quotes, no extra words. Example: if they were talking about volcanoes and say "make a page about that", reply: volcanoes`;
+export const RESOLVE_TOPIC_SYSTEM_PROMPT = `From the conversation, the child wants an interactive learning page. Reply with ONLY a short topic phrase (2-5 words) naming what the page should be about — like a page title, never a sentence or a question. Resolve references like "that", "it", or "this" to the actual subject discussed. If the request is vague (e.g. "tell me a story", "make something fun"), pick a fun, wholesome topic yourself (e.g. "a friendly dragon", "a space adventure"). No punctuation, no quotes, no extra words. Example: talking about volcanoes and they say "make a page about that" -> volcanoes`;
+
+// ---- PLACEHOLDER plan: a quick title/emoji/blurb shown on the card while the real
+// page generates. Must return clean JSON; the title is a page title, not a sentence. ----
+export const PLAN_SYSTEM_PROMPT = `You are naming a child's interactive learning page before it is built. Given a topic, respond with ONLY compact JSON, exactly: {"title":"<a clean, fun page title in Title Case, 2-5 words>","emoji":"<one emoji>","plan":"<a short friendly one-line description of what the page will have>"}. The title must be a real page title — never a question, a sentence, or a clarification.`;
+
+// ---- TOPIC SAFETY gate for content generation (the chat model already deflects
+// sensitive topics; this applies the same judgment to "make me a page about X/it"). ----
+export function TOPIC_SAFETY_PROMPT(age) {
+  const who = Number(age) > 0 ? `a ${age}-year-old child` : 'a young child (about 5-9)';
+  return `You are a safety gate for ${who}'s learning device. Given a TOPIC the child wants an interactive page or activity built about, decide if it is appropriate to build for this child. Respond with ONLY "yes" or "no".
+Say "no" for anything violent, about death, genocide, war, tragedy, weapons, drugs, crime, sexual or romantic, scary or disturbing, hateful, or any heavy real-world topic a child this age should explore with a grown-up. Say "yes" for wholesome learning topics (animals, nature, space, science, math, vehicles, gentle stories, etc.). Err on the side of caution: when unsure, say "no".`;
+}
 
 // ---- READING PRACTICE lesson generation (structured JSON, not HTML) ----
 // Output is rendered by the kiosk's native Reader (one line spoken / read at a

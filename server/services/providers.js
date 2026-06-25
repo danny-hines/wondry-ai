@@ -282,6 +282,11 @@ function mockText(task, prompt) {
     return JSON.stringify({ title: titleCase(extractTopic(prompt)), emoji: pickEmoji(prompt), plan: `Let's explore ${extractTopic(prompt)} together!` });
   }
   if (task === 'resolve') return extractTopic(prompt);
+  if (task === 'safety') {
+    // Deterministic stand-in for the topic-appropriateness gate: block an obvious
+    // blocklist, allow everything else. The real provider uses TOPIC_SAFETY_PROMPT.
+    return /\b(holocaust|genocide|war|weapon|gun|kill|suicide|murder|drug|sex|porn|nazi|terroris)/.test(p) ? 'no' : 'yes';
+  }
   if (task === 'summarize') return `Recent interests: ${extractTopic(prompt)}.`;
   if (/^(hi|hello|hey|yo|sup|howdy|how('?s| is) it going|how are you|good (morning|afternoon|evening))/.test(p))
     return "Hi there! I'm so happy to see you. What would you like to explore today?";

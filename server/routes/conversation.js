@@ -8,7 +8,7 @@ import { checkInput } from '../services/safety.js';
 import { startGeneration, createArtifact, getArtifact } from '../services/generator.js';
 import { enabledTypes, isTypeEnabled } from '../content/registry.js';
 import '../content/index.js'; // ensure content types are registered
-import { getChatSystemPrompt, INTENT_SYSTEM_PROMPT, RESOLVE_TOPIC_SYSTEM_PROMPT } from '../services/systemPrompt.js';
+import { getChatSystemPrompt, INTENT_SYSTEM_PROMPT, RESOLVE_TOPIC_SYSTEM_PROMPT, TOPIC_SAFETY_PROMPT } from '../services/systemPrompt.js';
 import { parseTimer, formatDuration } from '../services/timerParse.js';
 import { parseReminder } from '../services/reminderParse.js';
 import { startTimer, startReminder, cancelSchedule, listActiveTimers, listActiveSchedules } from '../services/scheduler.js';
@@ -62,17 +62,33 @@ function isLearnable(text) {
 }
 
 // Concrete topic for an artifact request. If the request is a bare reference ("that",
-// "it"), resolve it from conversation history; otherwise just use the extracted topic.
+// "it") or vague, resolve it from history; otherwise use the extracted topic. The model
+// sometimes replies conversationally to a vague request ("I'd be happy to, but…") — we
+// reject that so a clarification sentence never becomes the page title/subject.
 async function resolveTopic(text, history) {
   const t = extractTopic(text);
   const isRef = !t || t === 'something fun' || t.length < 3 || /^(that|it|this|those|these|them|one|stuff)$/i.test(t);
   if (!isRef) return t;
   try {
     const r = (await runText('resolve', { system: RESOLVE_TOPIC_SYSTEM_PROMPT, prompt: text, history }) || '').trim();
-    const cleaned = r.split('\n')[0].replace(/^["']+|["'.]+$/g, '').trim().slice(0, 60);
-    return cleaned || t;
-  } catch { return t; }
+    const cleaned = r.split('\n')[0].replace(/^["'.\s]+|["'.\s]+$/g, '').trim();
+    const conversational = cleaned.length > 40 || cleaned.split(/\s+/).length > 6 || /[?!]/.test(cleaned)
+      || /\b(i|i'?d|i'?m|sorry|but|need|understand|happy|can'?t|cannot|could you|what kind)\b/i.test(cleaned);
+    if (cleaned && !conversational) return cleaned;
+  } catch { /* fall through */ }
+  return 'something fun';   // unresolvable/vague → a clean generic, never a garbled phrase
 }
+
+// Topic-appropriateness gate for content generation. The chat model already deflects
+// sensitive topics; this applies the same judgment to "make me a page about X / it",
+// which otherwise bypasses it (the keyword checkInput misses things like "the Holocaust").
+async function topicAppropriate(topic, profile) {
+  try {
+    const r = (await runText('safety', { system: TOPIC_SAFETY_PROMPT(profile?.age), prompt: `Topic: ${topic}` }) || '').trim().toLowerCase();
+    return r.startsWith('y');                 // clear "yes" allows; anything else blocks
+  } catch { return true; }                    // fail open — chat deflection + output scan back this up
+}
+const TOPIC_DEFLECTION = "Hmm, that's a big topic to explore with a grown-up. Want me to make something fun instead — like animals, space, or a story?";
 
 async function startArtifactTurn(convId, profile, topic, reply) {
   const artifactId = await startGeneration({ topic, profile, source: 'on_demand' });
@@ -212,6 +228,12 @@ router.post('/turn', async (req, res) => {
   if (intent === 'artifact' && isTypeEnabled('page') && !offForKid.has('page')) {
     pendingOffers.delete(convId);
     const topic = await resolveTopic(text, history);
+    // Same appropriateness judgment the chat model applies — so "make me a page about
+    // it/the Holocaust" can't bypass a deflection and quietly build a page.
+    if (!(await topicAppropriate(topic, profile))) {
+      addMessage(convId, profileId, 'avatar', TOPIC_DEFLECTION);
+      return res.json({ kind: 'chat', reply: TOPIC_DEFLECTION, blocked: true });
+    }
     return res.json(await startArtifactTurn(convId, profile, topic, 'Ooh, let me build you something cool about that!'));
   }
 

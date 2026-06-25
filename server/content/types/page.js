@@ -2,7 +2,7 @@
 // the generic "build me something about X" type and the freeform escape hatch:
 // the model writes arbitrary HTML, served behind the CSP sandbox.
 import { runArtifact, runText, pickEmoji, titleCase, extractTopic } from '../../services/providers.js';
-import { getArtifactSystemPrompt } from '../../services/systemPrompt.js';
+import { getArtifactSystemPrompt, PLAN_SYSTEM_PROMPT } from '../../services/systemPrompt.js';
 import { resolveRichness } from '../../services/richness.js';
 import { checkOutputHTML } from '../../services/safety.js';
 
@@ -21,7 +21,7 @@ export default {
   async plan({ params }) {
     const topic = params.topic;
     try {
-      const j = JSON.parse(await runText('plan', { prompt: `Topic: ${topic}` }));
+      const j = JSON.parse(await runText('plan', { system: PLAN_SYSTEM_PROMPT, prompt: `Topic: ${topic}` }));
       return { title: j.title || titleCase(extractTopic(topic)), emoji: j.emoji || pickEmoji(topic), plan: j.plan || '', subject: extractTopic(topic), promptText: topic };
     } catch {
       return { title: titleCase(extractTopic(topic)), emoji: pickEmoji(topic), plan: '', subject: extractTopic(topic), promptText: topic };
