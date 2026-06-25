@@ -30,6 +30,10 @@ export default function Kiosk() {
   const [splitMode, setSplitMode] = useState<'artifact' | 'tray' | null>(null);
   const [full, setFull] = useState(false);
   const [items, setItems] = useState<Item[]>([]);
+  // Reveal state for the reply being spoken: `pending` shows a "…" while TTS synthesizes,
+  // then `shown` words are revealed in time with the audio. Cleared (→ full text) when
+  // speech ends or is interrupted.
+  const [reveal, setReveal] = useState<{ key: string; pending: boolean; shown: number } | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [openArt, setOpenArt] = useState<Artifact | null>(null);
   const [tray, setTray] = useState({ count: 0, unseen: 0 });
@@ -215,15 +219,29 @@ export default function Kiosk() {
     try {
       const res = await postTurn(user.id, text);
       if (seq !== turnSeq.current) return;   // interrupted/superseded — drop this stale reply
-      stopThinkingSound();
       const replyKey = 'a' + Date.now();
+      // Show the bubble immediately as a pending "…" but STAY in the thinking state
+      // (ring + beeps) until Piper actually has audio — no awkward idle-and-silent gap.
       setItems((p) => [...p, { key: replyKey, kind: 'bubble', role: 'avatar', text: res.reply }]);
-      avatarRef.current?.setMood('idle');
+      setReveal({ key: replyKey, pending: true, shown: 0 });
       if (res.kind === 'artifact' && res.artifact) { const art = res.artifact; setItems((p) => [...p, { key: art.id, kind: 'card', artifact: art }]); }
-      speak(res.reply, user.id, replyKey);
+      const words = (res.reply || '').split(/\s+/).filter(Boolean).length;
+      const onStart = () => {   // first audio is ready: hand off thinking → speaking
+        if (seq !== turnSeq.current) return;
+        stopThinkingSound();
+        avatarRef.current?.setMood('idle');
+        setReveal((r) => (r && r.key === replyKey ? { ...r, pending: false } : r));
+      };
+      const onProgress = (f: number) => {   // reveal words in time with the audio
+        const show = Math.min(words, Math.max(1, Math.ceil(f * words)));
+        setReveal((r) => (r && r.key === replyKey && show > r.shown ? { ...r, shown: show } : r));
+      };
+      await speak(res.reply, user.id, replyKey, undefined, onProgress, onStart);
+      if (seq === turnSeq.current) { stopThinkingSound(); avatarRef.current?.setMood('idle'); setReveal((r) => (r && r.key === replyKey ? null : r)); }
     } catch {
       if (seq !== turnSeq.current) return;
       stopThinkingSound();
+      setReveal(null);
       setItems((p) => [...p, { key: 'e' + Date.now(), kind: 'bubble', role: 'avatar', text: 'Oops, something went wrong. Try again?' }]);
       avatarRef.current?.setMood('idle');
     }
@@ -359,6 +377,7 @@ export default function Kiosk() {
         turnSeq.current++;
         stopSpeech();
         stopThinkingSound();
+        setReveal(null);   // an interrupted reply snaps to its full text
         setMicLive(true);
         avatarRef.current?.setMood('listening');
         playStartListening();   // low→high cue: "I'm listening"
@@ -412,8 +431,14 @@ export default function Kiosk() {
           <div id="bubbles" ref={bubblesRef}>
             {items.map((it) => it.kind === 'bubble'
               ? (it.role === 'avatar'
-                  ? <div key={it.key} className={`bubble avatar${it.key === speakingId ? ' speaking' : ''}`} title="Tap to hear again"
-                      onClick={() => replayBubble(it.key, it.text)} dangerouslySetInnerHTML={{ __html: mdToHtml(it.text) }} />
+                  ? (() => {
+                      const rv = reveal && reveal.key === it.key ? reveal : null;
+                      const html = rv?.pending ? '<span class="speak-dots">…</span>'
+                        : rv ? mdToHtml(it.text.split(/\s+/).slice(0, rv.shown).join(' '))
+                          : mdToHtml(it.text);
+                      return <div key={it.key} className={`bubble avatar${it.key === speakingId ? ' speaking' : ''}`} title="Tap to hear again"
+                        onClick={() => replayBubble(it.key, it.text)} dangerouslySetInnerHTML={{ __html: html }} />;
+                    })()
                   : <div key={it.key} className="bubble kid">{it.text}</div>)
               : <ArtifactCard key={it.key} artifact={it.artifact} onOpen={() => openArtifact(it.artifact)} onRetry={() => sendTurn('make a page about ' + (it.artifact.subject || it.artifact.title))} />)}
           </div>

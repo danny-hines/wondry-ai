@@ -66,12 +66,17 @@ export function useSpeech(avatarRef: RefObject<AvatarEngine | null>) {
 
   // `voice` overrides the per-profile voice (used by the admin preview to audition a
   // not-yet-saved selection); omit it and the server resolves the profile's voice.
-  const speak = useCallback(async (rawText: string, profileId?: string, token?: string, voice?: string, onProgress?: (f: number) => void) => {
-    const avatar = avatarRef.current; if (!avatar) return;
-    const text = stripMarkdown(rawText || '').trim(); if (!text) return;
+  // `onProgress(0..1)` reports OVERALL playback across the reply's sentences (for the
+  // bubble's word reveal). `onStart` fires once the first audio is actually ready —
+  // the caller uses it to hand off thinking→speaking (TTS synth can lag a second or two).
+  const speak = useCallback(async (rawText: string, profileId?: string, token?: string, voice?: string, onProgress?: (f: number) => void, onStart?: () => void) => {
+    const avatar = avatarRef.current; if (!avatar) { onStart?.(); return; }
+    const text = stripMarkdown(rawText || '').trim(); if (!text) { onStart?.(); return; }
     const id = ++genRef.current;
     stopAudio();
     setSpeakingId(token ?? null);
+    let started = false;
+    const markStarted = () => { if (!started) { started = true; onStart?.(); } };
     try {
       const sentences = splitSentences(text);
       let next = ttsArrayBuffer(sentences[0], profileId, voice);
@@ -81,8 +86,9 @@ export function useSpeech(avatarRef: RefObject<AvatarEngine | null>) {
         try { buf = await next; } catch { buf = null; }
         next = (i + 1 < sentences.length) ? ttsArrayBuffer(sentences[i + 1], profileId, voice) : Promise.resolve(null);
         if (id !== genRef.current) return;
-        if (buf === null) { await avatar.speakFallback(i === 0 ? text : sentences[i]); if (i === 0) return; continue; }
-        await playBuf(buf, id, onProgress);
+        markStarted();   // first audio (or fallback) is ready
+        if (buf === null) { onProgress?.(1); await avatar.speakFallback(i === 0 ? text : sentences[i]); if (i === 0) return; continue; }
+        await playBuf(buf, id, (f) => onProgress?.((i + f) / sentences.length));
       }
     } finally {
       // Only clear if we're still the active speech — a newer speak() has already

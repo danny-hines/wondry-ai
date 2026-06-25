@@ -101,6 +101,9 @@
 .bubble.avatar:active { transform: scale(.98); }
 .bubble.avatar::after { content: '🔊'; position: absolute; top: 4px; right: 8px; font-size: .8rem; opacity: 0; transition: opacity .15s ease; pointer-events: none; }
 .bubble.avatar:hover::after { opacity: .45; }
+/* "…" shown in a reply bubble while TTS is still synthesizing (before audio starts). */
+.speak-dots { letter-spacing: 3px; opacity: .5; animation: dotpulse 1.1s ease-in-out infinite; }
+@keyframes dotpulse { 0%, 100% { opacity: .3; } 50% { opacity: .85; } }
 .bubble.avatar p { margin: 0 0 8px; } .bubble.avatar p:last-child { margin-bottom: 0; }
 .bubble.avatar h1,.bubble.avatar h2,.bubble.avatar h3,.bubble.avatar h4,.bubble.avatar h5,.bubble.avatar h6 { margin: 6px 0; line-height: 1.2; font-weight: 800; }
 .bubble.avatar h1 { font-size: 1.35em; } .bubble.avatar h2 { font-size: 1.2em; }
