@@ -2,6 +2,7 @@ import { useRef, useState, useCallback, type RefObject } from 'react';
 import type { AvatarEngine } from './avatarEngine';
 import { ttsArrayBuffer } from '../lib/api';
 import { stripMarkdown } from '../lib/markdown';
+import { maskProfanity } from '../lib/profanity';
 import { audioCtx } from './audio';
 
 function splitSentences(t: string): string[] {
@@ -71,7 +72,9 @@ export function useSpeech(avatarRef: RefObject<AvatarEngine | null>) {
   // the caller uses it to hand off thinking→speaking (TTS synth can lag a second or two).
   const speak = useCallback(async (rawText: string, profileId?: string, token?: string, voice?: string, onProgress?: (f: number) => void, onStart?: () => void) => {
     const avatar = avatarRef.current; if (!avatar) { onStart?.(); return; }
-    const text = stripMarkdown(rawText || '').trim(); if (!text) { onStart?.(); return; }
+    // Final TTS gate: never speak profanity (covers chat replies, announcements,
+    // replays, and a page's tap-to-hear postMessage). Masked before markdown strip.
+    const text = stripMarkdown(maskProfanity(rawText || '')).trim(); if (!text) { onStart?.(); return; }
     const id = ++genRef.current;
     stopAudio();
     setSpeakingId(token ?? null);

@@ -11,6 +11,7 @@ import { primeAudio, applyWarm, playTestTone } from './audio';
 import { rendererFor } from '../content/registry';
 import { getProfiles, getTray, postTurn, markEngagement, getTimers, cancelSchedule, getAudioConfig } from '../lib/api';
 import { mdToHtml } from '../lib/markdown';
+import { maskProfanity } from '../lib/profanity';
 import { readableOn } from '../lib/contrast';
 import type { Profile, Artifact, WSMessage, ScheduleItem } from '../lib/types';
 import './kiosk.css';
@@ -437,13 +438,14 @@ export default function Kiosk() {
               ? (it.role === 'avatar'
                   ? (() => {
                       const rv = reveal && reveal.key === it.key ? reveal : null;
+                      const safe = maskProfanity(it.text);   // final render gate
                       const html = rv?.pending ? '<span class="speak-dots">…</span>'
-                        : rv ? mdToHtml(it.text.split(/\s+/).slice(0, rv.shown).join(' '))
-                          : mdToHtml(it.text);
+                        : rv ? mdToHtml(safe.split(/\s+/).slice(0, rv.shown).join(' '))
+                          : mdToHtml(safe);
                       return <div key={it.key} className={`bubble avatar${it.key === speakingId ? ' speaking' : ''}`} title="Tap to hear again"
                         onClick={() => replayBubble(it.key, it.text)} dangerouslySetInnerHTML={{ __html: html }} />;
                     })()
-                  : <div key={it.key} className="bubble kid">{it.text}</div>)
+                  : <div key={it.key} className="bubble kid">{maskProfanity(it.text)}</div>)
               : <ArtifactCard key={it.key} artifact={it.artifact} onOpen={() => openArtifact(it.artifact)} onRetry={() => sendTurn('make a page about ' + (it.artifact.subject || it.artifact.title))} />)}
           </div>
           {!voiceOnly && (

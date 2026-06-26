@@ -9,6 +9,9 @@ function log(profile_id, stage, verdict, reason, sample) {
     .run(uid(), profile_id || null, stage, verdict, reason || null, (sample || '').slice(0, 200), now());
 }
 
+// Whole-word profanity mask/detect for kid/avatar text + page topics (see profanity.js).
+export { maskProfanity, hasProfanity } from './profanity.js';
+
 export function checkInput(text, profile) {
   const cfg = getConfig().safety;
   const lower = (text || '').toLowerCase();

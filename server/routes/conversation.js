@@ -4,7 +4,7 @@
 import express from 'express';
 import { db, uid, now } from '../db.js';
 import { runText, extractTopic } from '../services/providers.js';
-import { checkInput } from '../services/safety.js';
+import { checkInput, maskProfanity, hasProfanity } from '../services/safety.js';
 import { startGeneration, createArtifact, getArtifact } from '../services/generator.js';
 import { enabledTypes, isTypeEnabled } from '../content/registry.js';
 import '../content/index.js'; // ensure content types are registered
@@ -35,6 +35,10 @@ function conversationHistory(convId) {
   ).all(convId, HISTORY_TURNS).reverse().map((r) => ({ role: r.role === 'kid' ? 'user' : 'assistant', content: r.text }));
 }
 function addMessage(convId, profileId, role, text, kind = 'text', artifactId = null, flag = 0) {
+  // Store kid/avatar conversation text masked, so the bubbles, history fed to the
+  // model, and the parent log never carry a swear (the safety_log keeps the raw
+  // sample separately for audit).
+  if (role === 'kid' || role === 'avatar') text = maskProfanity(text);
   const id = uid();
   db.prepare(`INSERT INTO messages (id,conversation_id,profile_id,role,kind,text,artifact_id,safety_flag,created_at)
               VALUES (?,?,?,?,?,?,?,?,?)`).run(id, convId, profileId, role, kind, text, artifactId, flag, now());
@@ -91,6 +95,10 @@ async function topicAppropriate(topic, profile) {
 const TOPIC_DEFLECTION = "Hmm, that's a big topic to explore with a grown-up. Want me to make something fun instead — like animals, space, or a story?";
 
 async function startArtifactTurn(convId, profile, topic, reply) {
+  // The topic becomes the page subject/title and the spoken announcement — mask any
+  // swear (e.g. a mis-transcribed question) so it can't be rendered or read aloud.
+  topic = maskProfanity(topic);
+  reply = maskProfanity(reply);
   const artifactId = await startGeneration({ topic, profile, source: 'on_demand' });
   addMessage(convId, profile.id, 'avatar', reply, 'artifact', artifactId);
   return { kind: 'artifact', reply, artifactId, artifact: getArtifact(artifactId) };
@@ -238,8 +246,10 @@ router.post('/turn', async (req, res) => {
   }
 
   // 3) plain spoken answer (with history); offer a page only for explorable questions
-  let reply = (await runText('chat', { system: getChatSystemPrompt(profile), prompt: text, history }) || '').trim();
-  if (isLearnable(text) && !looksDeflecting(reply)) {
+  let reply = maskProfanity((await runText('chat', { system: getChatSystemPrompt(profile), prompt: text, history }) || '').trim());
+  // Don't offer (or build) a page when the input has profanity — the offer topic is
+  // the raw question, which here is a swear/mis-transcription, not a real subject.
+  if (isLearnable(text) && !looksDeflecting(reply) && !hasProfanity(text)) {
     pendingOffers.set(convId, { topic: extractTopic(text), at: now() });
     if (!/\bmake you a page\b/i.test(reply)) reply += ' Want me to make you a page about it?';
   } else {
