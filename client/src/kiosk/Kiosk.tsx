@@ -242,7 +242,18 @@ export default function Kiosk() {
         setReveal((r) => (r && r.key === replyKey && show > r.shown ? { ...r, shown: show } : r));
       };
       await speak(res.reply, user.id, replyKey, undefined, onProgress, onStart);
-      if (seq === turnSeq.current) { stopThinkingSound(); avatarRef.current?.setMood('idle'); setReveal((r) => (r && r.key === replyKey ? null : r)); }
+      if (seq === turnSeq.current) {
+        stopThinkingSound(); avatarRef.current?.setMood('idle'); setReveal((r) => (r && r.key === replyKey ? null : r));
+        // The avatar asked something — auto-open the mic so the child can just answer.
+        // A short beat after the audio ends feels natural and avoids catching the TTS
+        // tail; the guards re-check so a newer turn, a tap-to-talk (start() is a no-op
+        // while listening), or navigating away during the beat still wins.
+        if (voiceOnly && /\?/.test(res.reply || '') && viewRef.current === 'conversation') {
+          setTimeout(() => {
+            if (seq === turnSeq.current && viewRef.current === 'conversation') { recRef.current?.start(); bumpIdle(); }
+          }, 350);
+        }
+      }
     } catch {
       if (seq !== turnSeq.current) return;
       stopThinkingSound();
