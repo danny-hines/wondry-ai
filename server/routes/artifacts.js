@@ -117,20 +117,32 @@ router.get('/artifact/:id', (req, res) => {
     "default-src 'self'; connect-src 'self'; img-src 'self' data:; " +
     "style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; " +
     "base-uri 'none'; form-action 'none'; frame-ancestors 'self'");
-  res.send(injectTouchBase(fs.readFileSync(p, 'utf8')));
+  // chrome=panel: the kiosk frames this page under floating header controls. Pad the
+  // top INSIDE the page so the title clears them, while the page's own background still
+  // reaches the very top of the panel (admin preview omits the param, so no padding).
+  const headerPad = req.query.chrome === 'panel';
+  res.send(injectTouchBase(fs.readFileSync(p, 'utf8'), headerPad));
 });
 
 // Generated pages rarely include touch affordances, so give them a baseline: snappy
 // taps (no double-tap-zoom / 300ms delay) and a generic pressed state on tappable
 // things. Conservative (brightness only — no layout-shifting transforms). CSP already
 // permits this inline style.
-const TOUCH_BASE = '<style>*{touch-action:manipulation;-webkit-tap-highlight-color:transparent}'
-  + 'button:active,a:active,[role=button]:active,[onclick]:active,summary:active,label:active,.btn:active,.card:active,.tile:active{filter:brightness(.9)}</style>';
-function injectTouchBase(html) {
-  if (html.includes('</head>')) return html.replace('</head>', TOUCH_BASE + '</head>');
+const TOUCH_BASE = '*{touch-action:manipulation;-webkit-tap-highlight-color:transparent}'
+  + 'button:active,a:active,[role=button]:active,[onclick]:active,summary:active,label:active,.btn:active,.card:active,.tile:active{filter:brightness(.9)}';
+// Kiosk panel chrome: reserve a header-height strip at the top of the page (content
+// only — the body background still paints behind the padding, so it reaches the panel's
+// top edge), and hide the page's scrollbar (the touchscreen scrolls by tap+drag; the
+// parent kiosk hides its own bars but can't reach inside this sandboxed iframe).
+const HEADER_PAD = 'body{padding-top:60px;box-sizing:border-box}'
+  + 'html,body{scrollbar-width:none;-ms-overflow-style:none}'
+  + 'html::-webkit-scrollbar,body::-webkit-scrollbar{width:0;height:0;display:none}';
+function injectTouchBase(html, headerPad = false) {
+  const style = '<style>' + TOUCH_BASE + (headerPad ? HEADER_PAD : '') + '</style>';
+  if (html.includes('</head>')) return html.replace('</head>', style + '</head>');
   const m = html.match(/<body[^>]*>/i);
-  if (m) return html.replace(m[0], m[0] + TOUCH_BASE);
-  return TOUCH_BASE + html;
+  if (m) return html.replace(m[0], m[0] + style);
+  return style + html;
 }
 
 export default router;

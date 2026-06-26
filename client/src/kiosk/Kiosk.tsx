@@ -482,7 +482,7 @@ export default function Kiosk() {
                     const R = rendererFor(openArt?.type);
                     return R
                       ? <R artifactId={openId} profile={user} speak={speak} speakingId={speakingId} setMood={(m) => avatarRef.current?.setMood(m)} />
-                      : <iframe sandbox="allow-scripts" src={`/api/artifact/${openId}`} title="page" />;
+                      : <iframe sandbox="allow-scripts" src={`/api/artifact/${openId}?chrome=panel`} title="page" />;
                   })()
                 : null}
         </div>
