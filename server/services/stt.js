@@ -10,6 +10,17 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+// whisper emits non-speech markers as literal text on silence/noise — [BLANK_AUDIO],
+// [ Silence ], (music), *laughs*, etc. Strip those bracketed/parenthesised/starred
+// annotations; if nothing with a letter or digit remains, it wasn't speech → ''. This
+// stops a silence marker from being sent as a turn (and looping the auto-listen).
+export function cleanTranscript(text) {
+  const t = String(text || '')
+    .replace(/\[[^\]]*\]/g, ' ').replace(/\([^)]*\)/g, ' ').replace(/\*[^*]*\*/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+  return /[a-z0-9]/i.test(t) ? t : '';
+}
+
 export function sttBackend() {
   if (process.env.WHISPER_HTTP_URL) return 'whisper-http';
   if (process.env.WHISPER_CMD && process.env.WHISPER_MODEL) return 'whisper-cli';
@@ -35,7 +46,7 @@ async function transcribeHttp(buf, mime) {
   const r = await fetch(process.env.WHISPER_HTTP_URL, { method: 'POST', body: form });
   if (!r.ok) throw new Error('whisper http ' + r.status);
   const j = await r.json().catch(() => ({}));
-  return { text: String(j.text || '').trim() };
+  return { text: cleanTranscript(j.text) };
 }
 
 // Spawn a process, capturing stderr; resolves { code, err } on close (never
@@ -73,7 +84,7 @@ async function transcribeCli(buf, mime) {
     let text = '';
     try { text = fs.readFileSync(outBase + '.txt', 'utf8').trim(); } catch {}
     if (w.code !== 0 && !text) throw new Error(`whisper exit ${w.code}: ${w.err.slice(0, 200)}`);
-    return { text };
+    return { text: cleanTranscript(text) };
   } finally {
     cleanup();
   }

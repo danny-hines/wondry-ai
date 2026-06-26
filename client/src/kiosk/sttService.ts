@@ -132,14 +132,18 @@ function serverEngine(): SttEngine {
             const QUIET = 0.025;      // RMS below this counts as silence
             const SILENCE_MS = 1500;  // trailing silence before we stop (room to pause and think)
             const MIN_MS = 500;       // give them a beat to start before arming
+            const VOICED_MS = 220;    // cumulative voiced audio needed before it counts as real
+                                      // speech — ignores clicks/pops/fan noise that would otherwise
+                                      // arm the silence-stop and cut the window to a couple seconds.
             vadActive = true;
-            let quietAt = 0;
+            let quietAt = 0, voicedMs = 0, prev = performance.now();
             const t0 = performance.now();
             const tick = () => {
               analyser.getByteTimeDomainData(data);
               let sum = 0; for (let k = 0; k < data.length; k++) { const v = (data[k] - 128) / 128; sum += v * v; }
               const rms = Math.sqrt(sum / data.length), now = performance.now();
-              if (rms > QUIET) { heard = true; quietAt = 0; }
+              const dt = now - prev; prev = now;
+              if (rms > QUIET) { voicedMs += dt; if (voicedMs >= VOICED_MS) heard = true; quietAt = 0; }
               else if (heard && now - t0 > MIN_MS) {
                 if (!quietAt) quietAt = now;
                 else if (now - quietAt > SILENCE_MS) { try { mr.stop(); } catch {} return; }
