@@ -90,8 +90,17 @@ export interface AdminConfig {
   chatSystemPrompt: string; defaultChatSystemPrompt: string;
   readingSystemPrompt: string; defaultReadingSystemPrompt: string;
   routing: Record<string, string>; providers: string[]; liveGeneration: boolean;
-  richness: RichnessConfig; wake: WakeConfig; kioskPin: string;
+  richness: RichnessConfig; wake: WakeConfig; facesEnabled: boolean; kioskPin: string;
   timezone: string; detectedTimezone: string; timezones: string[]; serverTime: number;
+}
+// ----- familiar faces (on-device face clustering / enrollment) -----
+export interface FaceCluster {
+  id: string; profileId: string | null; status: 'pending' | 'assigned' | 'ignored';
+  count: number; thumbs: string[]; created_at: number; updated_at: number;
+}
+export interface FacesResponse {
+  enabled: boolean; clusters: FaceCluster[];
+  kids: { id: string; name: string; initials: string; color: string }[];
 }
 export interface LogMessage {
   id: string; role: string; kind: string; text: string; created_at: number;
@@ -138,4 +147,4 @@ export interface EvalSuggestion {
   currentPrompt: string; changed: boolean; confidence: 'medium' | 'high';
   summary: string; rationale: string; revisedPrompt: string; runWhen?: number; error?: string;
 }
-export interface WSMessage { type: string; artifact?: Artifact; schedule?: ScheduleItem; at: number; announce?: boolean; state?: 'present' | 'absent'; changed?: boolean; }
+export interface WSMessage { type: string; artifact?: Artifact; schedule?: ScheduleItem; at: number; announce?: boolean; state?: 'present' | 'absent'; changed?: boolean; profileId?: string; confidence?: number; trackId?: string | null; }

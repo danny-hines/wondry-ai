@@ -29,6 +29,8 @@
   "generation": { "estimatedMs": 18000 },
   "presence": { "enabled": false },
   "_comment_presence": "When a person-detection sidecar (e.g. Hailo on the Pi) POSTs {state:'present'} to /api/presence, the idle avatar greets. enabled is informational for the sidecar; the kiosk reacts to any presence event.",
+  "faces": { "clusterThreshold": 0.5, "matchThreshold": 0.55, "maxSamplesPerCluster": 30 },
+  "_comment_faces": "Familiar-faces tuning (cosine similarity of L2-normalized ArcFace embeddings). clusterThreshold = group samples into the same person; matchThreshold = identify a live face against an enrolled child (stricter). The feature is gated by the faces_enabled parent toggle (off by default), NOT this block. Tune thresholds on real hardware.",
   "richness": {
     "default": "standard",
     "degradeTo": "simple",

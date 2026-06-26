@@ -249,6 +249,24 @@ boots. What the installer wires up (and how to do it by hand):
   `{"state":"present"}` / `{"state":"absent"}` to `http://localhost:8080/api/presence` — the idle avatar
   greets (throttled). No camera code runs in this app. Test it on any machine with
   `curl -XPOST localhost:8080/api/presence -H 'content-type: application/json' -d '{"state":"present"}'`.
+- **Familiar faces (auto child-switch):** off by default — turn it on in the console (**Familiar faces**
+  tab). A vision sidecar (fork Hailo's `hailo-apps` face-recognition pipeline, USB-camera input) detects
+  faces, computes 512-d ArcFace embeddings, and POSTs each frame's faces to `/api/faces/observe`:
+  `{"faces":[{"embedding":[…512 floats…],"thumb":"data:image/jpeg;base64,…","trackId":"t7","quality":0.9}]}`.
+  Send `thumb` only occasionally (≈ once/few-seconds per track) — a thumb means "bank this for enrollment";
+  embeddings without a thumb are identify-only. The app clusters the banked samples; in the console the
+  parent maps each cluster to a child. Then a recognized face makes the kiosk switch to that child's profile
+  **from the idle screen only** (sticky session — a second kid entering frame won't hijack it). All face
+  data (embeddings + tiny thumbnails) stays on the device; nothing is uploaded. Match thresholds are in
+  `config.json` → `faces` (tune on hardware). The whole server pipeline is unit-tested with synthetic
+  embeddings (`test/faces.test.js`); the sidecar is the only part that needs the Pi + camera.
+  - **Try it without the Pi (two dev testers):** with the app running, `node tools/faces-sim.mjs seed`
+    invents a few synthetic people so you can watch the **Familiar faces** tab fill up, assign clusters to
+    kids, then `node tools/faces-sim.mjs walk Ada` to make the kiosk switch. To use your *real* face on a
+    dev machine, open **`/faces-cam.html`** (e.g. `http://localhost:5173/faces-cam.html`): it runs face
+    detection + embeddings in the browser (face-api.js) off your webcam and POSTs to the same endpoint —
+    a non-Hailo stand-in for the sidecar (its 128-d embeddings differ from ArcFace, so tune `faces`
+    thresholds for dev).
 
 The systemd unit and kiosk launcher (`tools/kiosk.sh`) are written by the installer; tweak them there.
 

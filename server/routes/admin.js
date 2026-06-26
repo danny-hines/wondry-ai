@@ -1,7 +1,7 @@
 // Parental/admin portal API. Password-gated.
 import express from 'express';
 import fs from 'node:fs';
-import { db, uid, now, getKV, setKV, setAudience, audienceFor, readingSummary, usageSince, usageByModel, costByArtifact, listEvals, evalSummary, addPromptVersion, promptVersions, latestPromptVersion, recordEvalRun, evalRuns, runSummary, listRunEvals } from '../db.js';
+import { db, uid, now, getKV, setKV, setAudience, audienceFor, readingSummary, usageSince, usageByModel, costByArtifact, listEvals, evalSummary, addPromptVersion, promptVersions, latestPromptVersion, recordEvalRun, evalRuns, runSummary, listRunEvals, faceClustersForConsole, setFaceClusterProfile, deleteFaceCluster, releaseFaceClustersForProfile } from '../db.js';
 import { ADMIN_PASSWORD, getConfig, getRichness, liveGenerationEnabled } from '../config.js';
 import { selectedTierId, dailyCap } from '../services/richness.js';
 import { startGeneration, startReadingGeneration, createArtifact, getArtifact, artifactPath } from '../services/generator.js';
@@ -237,9 +237,29 @@ router.post('/profiles/:id/delete', (req, res) => {
   db.prepare('DELETE FROM messages WHERE profile_id=?').run(id);
   db.prepare('DELETE FROM conversations WHERE profile_id=?').run(id);
   db.prepare('DELETE FROM safety_log WHERE profile_id=?').run(id);
+  releaseFaceClustersForProfile(id);   // release enrolled faces back to 'pending' (FK + keep the faces)
   db.prepare('DELETE FROM profiles WHERE id=?').run(id);
   res.json({ ok: true });
 });
+
+// --- Familiar faces: parent reviews clusters of look-alike faces and maps each to a
+// child (or ignores strangers). The clusters themselves come from the vision sidecar. ---
+router.get('/faces', (req, res) => {
+  res.json({
+    enabled: getKV('faces_enabled', '0') === '1',
+    clusters: faceClustersForConsole(2),   // hide single-frame noise; assigned shown regardless
+    kids: db.prepare('SELECT id,name,initials,color FROM profiles ORDER BY name').all(),
+  });
+});
+router.post('/faces/clusters/:id/assign', (req, res) => {
+  const { profileId } = req.body || {};
+  if (!profileId || !db.prepare('SELECT 1 FROM profiles WHERE id=?').get(profileId)) return res.status(400).json({ error: 'unknown profile' });
+  setFaceClusterProfile(req.params.id, profileId, 'assigned');
+  res.json({ ok: true });
+});
+router.post('/faces/clusters/:id/ignore', (req, res) => { setFaceClusterProfile(req.params.id, null, 'ignored'); res.json({ ok: true }); });
+router.post('/faces/clusters/:id/unassign', (req, res) => { setFaceClusterProfile(req.params.id, null, 'pending'); res.json({ ok: true }); });
+router.post('/faces/clusters/:id/delete', (req, res) => { deleteFaceCluster(req.params.id); res.json({ ok: true }); });
 
 // --- Config: editable chat + artifact system prompts; read-only routing view ---
 router.get('/config', (req, res) => {
@@ -256,6 +276,7 @@ router.get('/config', (req, res) => {
     providers: Object.keys(cfg.providers),
     liveGeneration: liveGenerationEnabled(),
     wake: getWakeConfig(),
+    facesEnabled: getKV('faces_enabled', '0') === '1',
     kioskPin: getKV('kiosk_pin', '0000'),
     // Scheduling clock: the configured zone, the OS-detected default, the full IANA
     // list for the picker, and current server time so a skewed OS clock is visible.
@@ -284,7 +305,7 @@ router.get('/prompt-history', (req, res) => {
 });
 
 router.post('/config', (req, res) => {
-  const { richness, dailyCap: cap, wake, kioskPin, timezone, promptAuthor } = req.body || {};
+  const { richness, dailyCap: cap, wake, facesEnabled, kioskPin, timezone, promptAuthor } = req.body || {};
   // Save each prompt to KV (the live value) and append a history entry (deduped).
   const author = promptAuthor === 'eval' ? 'eval' : 'parent';
   for (const [field, key] of Object.entries(PROMPT_FIELDS)) {
@@ -294,6 +315,7 @@ router.post('/config', (req, res) => {
   if (typeof richness === 'string' && (getRichness().tiers || {})[richness]) setKV('content_richness', richness);
   if (cap !== undefined && cap !== null && cap !== '') setKV('richness_daily_cap', String(Math.max(0, parseInt(cap, 10) || 0)));
   if (wake && typeof wake === 'object') setWakeConfig(wake);
+  if (typeof facesEnabled === 'boolean') setKV('faces_enabled', facesEnabled ? '1' : '0');
   if (typeof kioskPin === 'string' && /^\d{4}$/.test(kioskPin)) setKV('kiosk_pin', kioskPin);
   if (typeof timezone === 'string') { try { setTimezone(timezone); } catch { return res.status(400).json({ error: 'invalid timezone' }); } }
   res.json({ ok: true });

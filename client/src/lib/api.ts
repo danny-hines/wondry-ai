@@ -1,4 +1,4 @@
-import type { Profile, TurnResponse, TrayResponse, Artifact, AdminConfig, LogMessage, SafetyEntry, ReadingAttempt, ReadingReportRow, ContentTypeManifest, UsageReport, ScheduleItem, EvalsResponse, EvalSuggestion, PromptVersion } from './types';
+import type { Profile, TurnResponse, TrayResponse, Artifact, AdminConfig, LogMessage, SafetyEntry, ReadingAttempt, ReadingReportRow, ContentTypeManifest, UsageReport, ScheduleItem, EvalsResponse, EvalSuggestion, PromptVersion, FacesResponse } from './types';
 
 const j = <T>(r: Response): Promise<T> => r.json() as Promise<T>;
 
@@ -74,7 +74,7 @@ export class AdminApi {
   private req(path: string, opts: RequestInit = {}) { return fetch('/api/admin' + path, { ...opts, headers: { ...this.h(), ...(opts.headers || {}) } }); }
   async ok(): Promise<boolean> { return (await this.req('/config')).ok; }
   config = () => this.req('/config').then(j<AdminConfig>);
-  saveConfig = (body: { systemPrompt?: string; chatSystemPrompt?: string; readingSystemPrompt?: string; richness?: string; dailyCap?: number; wake?: { enabled?: boolean; phrase?: string }; kioskPin?: string; timezone?: string; promptAuthor?: string }) => this.req('/config', { method: 'POST', body: JSON.stringify(body) });
+  saveConfig = (body: { systemPrompt?: string; chatSystemPrompt?: string; readingSystemPrompt?: string; richness?: string; dailyCap?: number; wake?: { enabled?: boolean; phrase?: string }; facesEnabled?: boolean; kioskPin?: string; timezone?: string; promptAuthor?: string }) => this.req('/config', { method: 'POST', body: JSON.stringify(body) });
   promptHistory = (key: string) => this.req(`/prompt-history?key=${key}`).then(j<{ versions: PromptVersion[] }>);
   log = () => this.req('/log').then(j<{ messages: LogMessage[]; safety: SafetyEntry[] }>);
   artifacts = () => this.req('/artifacts').then(j<{ artifacts: Artifact[]; kids: Profile[] }>);
@@ -97,6 +97,9 @@ export class AdminApi {
   contentTypes = () => this.req('/content-types').then(j<{ types: ContentTypeManifest[] }>);
   setContentTypeEnabled = (id: string, enabled: boolean) => this.req(`/content-types/${id}`, { method: 'POST', body: JSON.stringify({ enabled }) });
   deleteProfile = (id: string) => this.req(`/profiles/${id}/delete`, { method: 'POST' });
+  faces = () => this.req('/faces').then(j<FacesResponse>);
+  assignFace = (clusterId: string, profileId: string) => this.req(`/faces/clusters/${clusterId}/assign`, { method: 'POST', body: JSON.stringify({ profileId }) });
+  faceCluster = (clusterId: string, action: 'ignore' | 'unassign' | 'delete') => this.req(`/faces/clusters/${clusterId}/${action}`, { method: 'POST' });
 }
 export const login = (password: string) =>
   fetch('/api/admin/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password }) });

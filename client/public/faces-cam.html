@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Wondry — webcam face tester (dev)</title>
+<style>
+  :root { font-family: ui-rounded, "Segoe UI", system-ui, sans-serif; }
+  body { margin: 0; background: #0f1115; color: #e7e9ee; display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 22px; }
+  h1 { font-size: 1.3rem; margin: 0; }
+  p.note { color: #97a2b2; max-width: 640px; text-align: center; margin: 0; font-size: .95rem; }
+  .stage { position: relative; width: 480px; max-width: 92vw; border-radius: 16px; overflow: hidden; background: #000; }
+  video, canvas.ov { width: 100%; display: block; }
+  canvas.ov { position: absolute; inset: 0; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; align-items: center; }
+  button { font: inherit; font-weight: 700; border: none; border-radius: 12px; padding: 11px 22px; cursor: pointer; background: #2563eb; color: #fff; }
+  button.stop { background: #ef4444; }
+  button:disabled { opacity: .5; cursor: default; }
+  .panel { width: 480px; max-width: 92vw; background: #181b22; border: 1px solid #262a32; border-radius: 14px; padding: 14px 16px; }
+  .panel b { color: #fff; }
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: .82rem; font-weight: 800; }
+  .pill.on { background: #16a34a; color: #fff; } .pill.off { background: #b91c1c; color: #fff; }
+  .log { font-family: ui-monospace, monospace; font-size: .82rem; color: #b9c2d0; max-height: 160px; overflow-y: auto; margin-top: 8px; white-space: pre-wrap; }
+  .recog { font-size: 1.15rem; font-weight: 800; margin-top: 4px; }
+  a { color: #7aa2ff; }
+</style>
+</head>
+<body>
+  <h1>👁️ Webcam face tester <span style="color:#97a2b2;font-size:.9rem">(dev only)</span></h1>
+  <p class="note">Stands in for the Pi vision sidecar: your webcam → an in-browser face embedding → the same
+    <code>/api/faces/observe</code> endpoint. Turn <b>Familiar faces</b> ON in the console first. Run this a while to
+    enroll (snapshots get banked), assign your cluster to a child in the console, then keep watching — the kiosk
+    switches to that child. All in-browser; nothing is uploaded externally (faces post only to your local server).</p>
+
+  <div class="stage">
+    <video id="v" autoplay muted playsinline></video>
+    <canvas id="ov" class="ov"></canvas>
+  </div>
+  <div class="row">
+    <button id="start">Start camera</button>
+    <button id="stop" class="stop" disabled>Stop</button>
+  </div>
+  <div class="panel">
+    <div>Faces feature: <span id="enabled" class="pill off">unknown</span> &nbsp; Models: <span id="models">not loaded</span></div>
+    <div class="recog" id="recog">—</div>
+    <div class="log" id="log"></div>
+  </div>
+
+<script type="module">
+import * as faceapi from 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.esm.js';
+const MODELS = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model';
+
+const v = document.getElementById('v'), ov = document.getElementById('ov');
+const $ = (id) => document.getElementById(id);
+const log = (m) => { const el = $('log'); el.textContent = `${new Date().toLocaleTimeString()}  ${m}\n` + el.textContent.split('\n').slice(0, 40).join('\n'); };
+
+let names = {};
+fetch('/api/profiles').then((r) => r.json()).then((d) => { for (const p of d.profiles) names[p.id] = p.name; }).catch(() => {});
+
+let modelsReady = false;
+async function loadModels() {
+  if (modelsReady) return;
+  $('models').textContent = 'loading… (first time downloads a few MB)';
+  await faceapi.nets.tinyFaceDetector.loadFromUri(MODELS);
+  await faceapi.nets.faceLandmark68Net.loadFromUri(MODELS);
+  await faceapi.nets.faceRecognitionNet.loadFromUri(MODELS);
+  modelsReady = true; $('models').textContent = 'ready';
+}
+
+function thumb(box) {
+  const c = document.createElement('canvas'); c.width = c.height = 112;
+  const ctx = c.getContext('2d');
+  const pad = box.width * 0.25;
+  const sx = Math.max(0, box.x - pad), sy = Math.max(0, box.y - pad);
+  const sw = Math.min(v.videoWidth - sx, box.width + 2 * pad), sh = Math.min(v.videoHeight - sy, box.height + 2 * pad);
+  ctx.drawImage(v, sx, sy, sw, sh, 0, 0, 112, 112);
+  return c.toDataURL('image/jpeg', 0.7);
+}
+function drawBox(box) {
+  ov.width = v.videoWidth; ov.height = v.videoHeight;
+  const ctx = ov.getContext('2d'); ctx.clearRect(0, 0, ov.width, ov.height);
+  if (!box) return;
+  ctx.strokeStyle = '#22c55e'; ctx.lineWidth = 3; ctx.strokeRect(box.x, box.y, box.width, box.height);
+}
+
+let running = false, lastThumb = 0;
+async function tick() {
+  if (!running) return;
+  let det;
+  try { det = await faceapi.detectSingleFace(v, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.4 })).withFaceLandmarks().withFaceDescriptor(); }
+  catch (e) { log('detect error: ' + e.message); return setTimeout(tick, 800); }
+  if (!det) { drawBox(null); $('recog').textContent = 'no face in frame'; return setTimeout(tick, 500); }
+  drawBox(det.detection.box);
+  const face = { embedding: Array.from(det.descriptor), trackId: 'cam', quality: det.detection.score };
+  const now = Date.now(), bank = now - lastThumb > 2500;
+  if (bank) { face.thumb = thumb(det.detection.box); lastThumb = now; }
+  try {
+    const r = await fetch('/api/faces/observe', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ faces: [face] }) }).then((x) => x.json());
+    $('enabled').className = 'pill ' + (r.enabled ? 'on' : 'off');
+    $('enabled').textContent = r.enabled ? 'ON' : 'OFF — turn it on in the console';
+    const id = (r.identified || [])[0];
+    if (id) $('recog').textContent = `✓ Recognized: ${names[id.profileId] || id.profileId}  (${(+id.confidence).toFixed(2)})`;
+    else $('recog').textContent = r.enabled ? 'face seen — not enrolled yet (assign your cluster in the console)' : 'feature is off';
+    log(`face ${det.detection.score.toFixed(2)}${bank ? ' · banked' : ''}${id ? ' · id=' + (names[id.profileId] || id.profileId) : ''}`);
+  } catch (e) { log('post error: ' + e.message); }
+  setTimeout(tick, 600);
+}
+
+$('start').onclick = async () => {
+  try {
+    await loadModels();
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+    v.srcObject = stream; await v.play();
+    running = true; $('start').disabled = true; $('stop').disabled = false;
+    log('started'); tick();
+  } catch (e) { log('camera/model error: ' + e.message); alert('Could not start: ' + e.message); }
+};
+$('stop').onclick = () => { running = false; $('start').disabled = false; $('stop').disabled = true; (v.srcObject?.getTracks() || []).forEach((t) => t.stop()); drawBox(null); log('stopped'); };
+</script>
+</body>
+</html>

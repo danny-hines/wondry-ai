@@ -38,7 +38,7 @@ export default function Admin() {
     );
   }
 
-  const tabs = [['log', 'Activity Log'], ['content', 'Content'], ['kids', 'Kids'], ['schedule', 'Scheduling'], ['reading', 'Reading'], ['evals', 'Evals'], ['settings', 'Settings']];
+  const tabs = [['log', 'Activity Log'], ['content', 'Content'], ['kids', 'Kids'], ['schedule', 'Scheduling'], ['reading', 'Reading'], ['evals', 'Evals'], ['faces', 'Familiar faces'], ['settings', 'Settings']];
   return (
     <AdminCtx.Provider value={api}>
       <div className="admin">

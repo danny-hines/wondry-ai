@@ -58,9 +58,14 @@ export default function Kiosk() {
 
   const user = profiles[userIdx] || null;
   const userRef = useRef<Profile | null>(null); userRef.current = user;
+  const profilesRef = useRef<Profile[]>(profiles); profilesRef.current = profiles;
   const openRef = useRef<string | null>(null); openRef.current = openId;
   const viewRef = useRef<View>(view); viewRef.current = view;
   const itemsRef = useRef<Item[]>(items); itemsRef.current = items;
+  // The profile we auto-switched to via face recognition this idle period. Keeps the
+  // session "sticky": once Logan is recognized, a different face won't switch until the
+  // device returns to idle (cleared in goIdle).
+  const faceLockRef = useRef<string | null>(null);
 
   const refreshTray = useCallback(async () => {
     const u = userRef.current; if (!u) return;
@@ -75,7 +80,7 @@ export default function Kiosk() {
     if (idleTimer.current) clearTimeout(idleTimer.current);
     idleTimer.current = setTimeout(() => { if (viewRef.current !== 'split') goIdle(); }, IDLE_MS);
   }, []);
-  const goIdle = () => { setView('idle'); setSplitMode(null); setOpenId(null); setFull(false); setHintSeen(false); avatarRef.current?.setMood('idle'); };
+  const goIdle = () => { faceLockRef.current = null; setView('idle'); setSplitMode(null); setOpenId(null); setFull(false); setHintSeen(false); avatarRef.current?.setMood('idle'); };
 
   useEffect(() => {
     getProfiles().then((ps) => setProfiles(ps));
@@ -119,6 +124,7 @@ export default function Kiosk() {
         if (evt.type === 'artifact.completed' && a) { completeCard(a); announce(a); refreshTray(); }
         else if (evt.type === 'artifact.failed' && a) { failCard(a); }
         else if (evt.type === 'presence' && evt.state === 'present') { maybeGreet(); }
+        else if (evt.type === 'face.recognized') { maybeSwitchToFace(evt.profileId); }
         // Wake word heard (on-device sidecar → /api/wake): start listening, same as
         // a face tap. recRef.start() is a no-op if already listening.
         else if (evt.type === 'wake') { if (viewRef.current === 'idle') setView('conversation'); setHintSeen(true); recRef.current?.start(); bumpIdle(); }
@@ -183,6 +189,27 @@ export default function Kiosk() {
     // shows the equalizer, which would be wrong here).
     speak(`Hi${u.name ? ' ' + u.name : ''}! I'm right here whenever you want to explore something fun.`, u.id);
   }, [speak]);
+
+  // Familiar faces: a recognized child (server → `face.recognized`) switches the
+  // active profile, but ONLY from idle and only the first recognition each idle
+  // period (the session is sticky — another kid entering frame won't hijack it).
+  // When the active kid is re-recognized we just keep the session alive (bumpIdle);
+  // when they leave, no events come, the idle timer fires, goIdle clears the lock,
+  // and the next person seen can take over.
+  const maybeSwitchToFace = useCallback((profileId?: string) => {
+    if (!profileId) return;
+    const u = userRef.current;
+    if (u && u.id === profileId) { bumpIdle(); return; }   // active kid still here → keep session warm
+    if (viewRef.current !== 'idle' || faceLockRef.current) return;   // mid-session / already claimed → sticky
+    const ps = profilesRef.current;
+    const idx = ps.findIndex((p) => p.id === profileId);
+    if (idx < 0) return;
+    faceLockRef.current = profileId;
+    setUserIdx(idx); setItems([]);
+    bumpIdle();
+    const name = ps[idx]?.name;
+    speak(`Hi${name ? ' ' + name : ''}! Good to see you.`, profileId);
+  }, [speak, bumpIdle]);
 
   // Keep the latest message pinned to the bottom. Smooth when a new bubble/card
   // arrives; instant while a reply streams in word-by-word (`reveal`) so the growing

@@ -160,6 +160,26 @@ export function initSchema() {
       author TEXT NOT NULL DEFAULT 'parent', note TEXT, created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_prompt_versions ON prompt_versions(prompt_key, created_at);
+    -- "Familiar faces": on-device face recognition for auto child-profile switching.
+    -- A vision sidecar (Hailo on the Pi) POSTs face embeddings + thumbnails; we cluster
+    -- them and a parent assigns a cluster to a child. ALL on-device, off by default.
+    -- face_clusters: one group of look-alike faces. status: pending (unassigned) |
+    -- assigned (mapped to profile_id) | ignored (a stranger the parent dismissed).
+    -- centroid: JSON 512-d mean ArcFace vector (L2-normalized), updated incrementally.
+    CREATE TABLE IF NOT EXISTS face_clusters (
+      id TEXT PRIMARY KEY, profile_id TEXT REFERENCES profiles(id),
+      status TEXT NOT NULL DEFAULT 'pending', n INTEGER NOT NULL DEFAULT 0,
+      centroid TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_face_clusters_profile ON face_clusters(profile_id, status);
+    -- face_samples: individual observations (embedding + small thumbnail) banked for
+    -- the clustering UI. Capped per cluster; embedding is JSON, thumb a small data URI.
+    CREATE TABLE IF NOT EXISTS face_samples (
+      id TEXT PRIMARY KEY, cluster_id TEXT REFERENCES face_clusters(id),
+      embedding TEXT NOT NULL, thumb TEXT, quality REAL NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_face_samples_cluster ON face_samples(cluster_id, created_at);
     CREATE TABLE IF NOT EXISTS config_kv ( key TEXT PRIMARY KEY, value TEXT );
     CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_id);
     CREATE INDEX IF NOT EXISTS idx_artifacts_profile ON artifacts(profile_id);
@@ -258,6 +278,71 @@ export function usageSince(ts) {
 export function usageByModel(ts) {
   return db.prepare(`SELECT model, COALESCE(SUM(cost_usd),0) AS cost, COUNT(*) AS n
     FROM api_usage WHERE created_at >= ? GROUP BY model ORDER BY cost DESC`).all(ts);
+}
+
+// --- Familiar faces (on-device face clustering / enrollment) ---
+export function createFaceCluster(centroid) {
+  const id = uid();
+  db.prepare(`INSERT INTO face_clusters (id,status,n,centroid,created_at,updated_at) VALUES (?,?,?,?,?,?)`)
+    .run(id, 'pending', 1, JSON.stringify(centroid), now(), now());
+  return id;
+}
+export function updateFaceClusterCentroid(id, centroid, n) {
+  db.prepare(`UPDATE face_clusters SET centroid=?, n=?, updated_at=? WHERE id=?`).run(JSON.stringify(centroid), n, now(), id);
+}
+export function insertFaceSample({ clusterId, embedding, thumb, quality = 0 }) {
+  const id = uid();
+  db.prepare(`INSERT INTO face_samples (id,cluster_id,embedding,thumb,quality,created_at) VALUES (?,?,?,?,?,?)`)
+    .run(id, clusterId ?? null, JSON.stringify(embedding), thumb ?? null, Number(quality) || 0, now());
+  return id;
+}
+// Candidate clusters to grow during online clustering: everything not dismissed.
+export function faceClusterCentroids() {
+  return db.prepare(`SELECT id, centroid, n FROM face_clusters WHERE status != 'ignored'`).all()
+    .map((r) => ({ id: r.id, centroid: JSON.parse(r.centroid), n: r.n }));
+}
+// Enrolled galleries for live identification: clusters mapped to a child.
+export function assignedFaceGalleries() {
+  return db.prepare(`SELECT id, profile_id, centroid FROM face_clusters WHERE status='assigned' AND profile_id IS NOT NULL`).all()
+    .map((r) => ({ clusterId: r.id, profileId: r.profile_id, centroid: JSON.parse(r.centroid) }));
+}
+// Clusters for the console (with sample count + a few representative thumbnails).
+export function faceClustersForConsole(minSamples = 1) {
+  const rows = db.prepare(`SELECT id, profile_id, status, n, created_at, updated_at FROM face_clusters ORDER BY updated_at DESC`).all();
+  return rows
+    .map((r) => ({
+      id: r.id, profileId: r.profile_id, status: r.status, count: clusterSampleCount(r.id),
+      thumbs: clusterThumbs(r.id, 6), created_at: r.created_at, updated_at: r.updated_at,
+    }))
+    .filter((c) => c.count >= minSamples || c.status === 'assigned');
+}
+export function clusterSampleCount(clusterId) {
+  return db.prepare(`SELECT COUNT(*) AS n FROM face_samples WHERE cluster_id=?`).get(clusterId).n;
+}
+export function clusterThumbs(clusterId, limit = 6) {
+  return db.prepare(`SELECT thumb FROM face_samples WHERE cluster_id=? AND thumb IS NOT NULL ORDER BY quality DESC, created_at DESC LIMIT ?`)
+    .all(clusterId, limit).map((r) => r.thumb);
+}
+// Keep only the best `max` samples in a cluster (highest quality / most recent).
+export function trimClusterSamples(clusterId, max) {
+  const extra = db.prepare(`SELECT id FROM face_samples WHERE cluster_id=? ORDER BY quality DESC, created_at DESC LIMIT -1 OFFSET ?`).all(clusterId, max).map((r) => r.id);
+  if (extra.length) db.prepare(`DELETE FROM face_samples WHERE id IN (${extra.map(() => '?').join(',')})`).run(...extra);
+}
+export function setFaceClusterProfile(id, profileId, status) {
+  db.prepare(`UPDATE face_clusters SET profile_id=?, status=?, updated_at=? WHERE id=?`).run(profileId ?? null, status, now(), id);
+}
+export function deleteFaceCluster(id) {
+  db.prepare(`DELETE FROM face_samples WHERE cluster_id=?`).run(id);
+  db.prepare(`DELETE FROM face_clusters WHERE id=?`).run(id);
+}
+// On profile delete: release its enrolled clusters back to 'pending' (keep the faces).
+export function releaseFaceClustersForProfile(profileId) {
+  db.prepare(`UPDATE face_clusters SET profile_id=NULL, status='pending', updated_at=? WHERE profile_id=?`).run(now(), profileId);
+}
+export function faceEnrollmentCounts() {
+  return Object.fromEntries(
+    db.prepare(`SELECT profile_id, COUNT(*) AS n FROM face_clusters WHERE status='assigned' AND profile_id IS NOT NULL GROUP BY profile_id`)
+      .all().map((r) => [r.profile_id, r.n]));
 }
 
 // --- schedules (device-global timers + wall-clock reminders/alarms) ---
