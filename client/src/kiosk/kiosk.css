@@ -149,9 +149,20 @@
 /* Corner controls (switch-user initials + My pages). Bottom-right by default with
    generous touch targets (~56px); they dock into the open panel's header in split
    view (JS FLIPs the move — see Kiosk.tsx). */
-#corner { position: absolute; right: 0; bottom: 0; z-index: 10; display: flex; align-items: stretch; }
+/* Closed: stack vertically (initials over apps icon) so the docked pair stays one
+   touch-target wide and doesn't crowd the chat bubbles at 1024x600. Opening the panel
+   lays them out horizontally again as the panel header (.state-split below). */
+#corner { position: absolute; right: 0; bottom: 0; z-index: 10; display: flex; flex-direction: column; align-items: stretch; }
 #initials { background: var(--user, #16b8a6); color: var(--user-fg, #fff); font-weight: 800; letter-spacing: .5px; display: flex; align-items: center; justify-content: center; min-width: 30px; padding: 0 20px; min-height: 56px; cursor: pointer; font-size: 19px; border-radius: 14px 0 0 0; transition: background-color .5s ease; }
-#trayBtn { background: var(--user, #16b8a6); border: none; cursor: pointer; padding: 0 20px; min-height: 56px; position: relative; display: flex; align-items: center; justify-content: center; transition: background-color .5s ease; }
+/* Bottom item of the docked stack: only its bottom-right rounds, matching the frame's
+   inner corner radius (26px outer − 12px border) so it nests into the curve. Chromium
+   clips children on a slightly different sub-pixel boundary than where the frame border
+   paints, leaving a 1px hairline of the page background at the rounded corner. Bleed the
+   fill 3px along the bottom edge, right edge, and diagonal (never up/left, so nothing
+   protrudes into the chat) — the frame's overflow:hidden clips it back to the exact
+   curve, so the seam shows frame-color (= same var(--user)) instead of background. */
+#trayBtn { background: var(--user, #16b8a6); border: none; cursor: pointer; padding: 0 20px; min-height: 56px; position: relative; display: flex; align-items: center; justify-content: center; transition: background-color .5s ease; border-radius: 0 0 14px 0;
+  box-shadow: 0 3px 0 0 var(--user, #16b8a6), 3px 0 0 0 var(--user, #16b8a6), 3px 3px 0 0 var(--user, #16b8a6); }
 #trayBtn.empty { display: none; }
 #trayBtn .trayIcon { width: 25px; height: 25px; display: block; fill: var(--user-fg, #fff); opacity: .95; }
 #trayBadge { position: absolute; top: 6px; right: 8px; background: #ef4444; color: #fff; font-size: 11px; font-weight: 800; min-width: 16px; height: 16px; border-radius: 9px; display: flex; align-items: center; justify-content: center; padding: 0 4px; }
@@ -160,9 +171,9 @@
    a ✕ that closes the panel (the My-pages icon's open-state role). Top/right edges sit
    flush to the display corner; only the inner bottom-left corner is rounded so it reads
    as a tab hanging off the panel header. */
-.state-split #corner { left: auto; bottom: auto; top: 0; right: 0; gap: 0; align-items: stretch; }
+.state-split #corner { left: auto; bottom: auto; top: 0; right: 0; gap: 0; flex-direction: row; align-items: stretch; }
 .state-split #initials { border-radius: 0 0 0 14px; }
-.state-split #trayBtn { border-radius: 0; }
+.state-split #trayBtn { border-radius: 0; box-shadow: none; }
 .state-split #trayBtn.empty { display: flex; }   /* it's the close button now — show even with an empty tray */
 .trayX { font-size: 23px; font-weight: 700; line-height: 1; color: var(--user-fg, #fff); }
 
