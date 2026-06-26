@@ -90,7 +90,7 @@ function serverEngine(): SttEngine {
     available: canCapture,
     live: false,
     backend: 'server',
-    listen(maxMs = 8000, onCaptureEnd?: () => void): SttSession {
+    listen(maxMs = 11000, onCaptureEnd?: () => void): SttSession {
       let stop = () => {};
       const result = new Promise<SttResult>((resolve) => {
         if (!canCapture) { resolve({ transcript: '', backend: 'server' }); return; }
@@ -99,6 +99,7 @@ function serverEngine(): SttEngine {
           const mr = new MediaRecorder(stream);
           let done = false, raf = 0;
           let ctx: AudioContext | null = null;
+          let heard = false, vadActive = false;   // shared with the VAD tick below
           const finish = async () => {
             if (done) return; done = true;
             onCaptureEnd?.();
@@ -106,6 +107,10 @@ function serverEngine(): SttEngine {
             cancelAnimationFrame(raf); try { ctx?.close(); } catch {}
             try { mr.stop(); } catch {}
             stream.getTracks().forEach((t) => t.stop());
+            // No speech the whole window: return empty instead of transcribing — whisper
+            // hallucinates phrases on silence ("thank you", etc.), which would fake a turn
+            // and loop the auto-listen-after-a-question. Empty makes the caller just stop.
+            if (vadActive && !heard) { resolve({ transcript: '', backend: 'server' }); return; }
             const blob = new Blob(chunks, { type: mr.mimeType || 'audio/webm' });
             const r = await serverTranscribe(blob);
             resolve({ transcript: r.text || '', backend: 'server' });
@@ -125,9 +130,10 @@ function serverEngine(): SttEngine {
             node.connect(analyser);
             const data = new Uint8Array(analyser.fftSize);
             const QUIET = 0.025;      // RMS below this counts as silence
-            const SILENCE_MS = 900;   // trailing silence before we stop
+            const SILENCE_MS = 1500;  // trailing silence before we stop (room to pause and think)
             const MIN_MS = 500;       // give them a beat to start before arming
-            let heard = false, quietAt = 0;
+            vadActive = true;
+            let quietAt = 0;
             const t0 = performance.now();
             const tick = () => {
               analyser.getByteTimeDomainData(data);
