@@ -55,6 +55,20 @@ const looksDeflecting = (r) =>
 const isAffirmation = (t) =>
   /^(yes|yeah|yep|yup|ya|yass+|sure|ok|okay|okey|please|yes please|yes plz|do it|build it|make it|i do|i would|sounds good|let'?s do it)\b/i.test((t || '').trim());
 
+// The server is the SOLE gate for when we offer to build a page (see the isLearnable
+// gate below). The chat model is told not to offer pages, but it imitates the offers
+// the server appends — which land in the history it sees — so it sometimes pitches one
+// anyway, even on turns with no real topic ("I love you" -> "...want me to make you a
+// page about it?"). Strip any such trailing self-offer so only the gated server offer
+// remains. Requires an offer prefix ("want me to", "let me"…) so plain sentences that
+// merely mention making something are left untouched.
+const PAGE_OFFER_RE = /\s*(?:do you want me to |would you like me to |would you like to |want me to |want to |should i |shall i |can i |let me |i can |i could |how about i )(?:make|build|create|show|do)\s+(?:you\s+)?(?:a|an|one|some)?\s*(?:cool |fun |neat |little )?(?:page|lesson|game|quiz|story|activity)\b[^.?!]*[.?!]\s*$/i;
+function stripPageOffer(reply) {
+  let r = reply || '';
+  while (PAGE_OFFER_RE.test(r)) r = r.replace(PAGE_OFFER_RE, '').trim();
+  return r;
+}
+
 function isLearnable(text) {
   const p = (text || '').toLowerCase();
   if (/^(hi|hello|hey|yo|sup|howdy)\b/.test(p)) return false;
@@ -62,6 +76,10 @@ function isLearnable(text) {
   if (/\b(time|what day|date)\b/.test(p)) return false;
   const topic = extractTopic(text);
   if (!topic || topic === 'something fun' || topic.length < 3) return false;
+  // Reject bare references/interrogatives as topics — "make me a page about what?"
+  // extracts "what", which is not something we can build a page about. Without this
+  // the server would offer (and queue) a page about a meaningless topic.
+  if (/^(that|it|this|those|these|them|one|stuff|what|which|who|whom|whose|where|when|why|how|anything|something|nothing|idk)$/i.test(topic)) return false;
   return /\b(how|what|why|where|when|who|tell me|explain|teach|learn|about|made|work)\b/.test(p);
 }
 
@@ -245,13 +263,15 @@ router.post('/turn', async (req, res) => {
     return res.json(await startArtifactTurn(convId, profile, topic, 'Ooh, let me build you something cool about that!'));
   }
 
-  // 3) plain spoken answer (with history); offer a page only for explorable questions
-  let reply = maskProfanity((await runText('chat', { system: getChatSystemPrompt(profile), prompt: text, history }) || '').trim());
+  // 3) plain spoken answer (with history); offer a page only for explorable questions.
+  // Strip any page offer the model pitched on its own so the gate below is the only
+  // thing that can add one — keeping offers tied to a real, learnable topic.
+  let reply = stripPageOffer(maskProfanity((await runText('chat', { system: getChatSystemPrompt(profile), prompt: text, history }) || '').trim()));
   // Don't offer (or build) a page when the input has profanity — the offer topic is
   // the raw question, which here is a swear/mis-transcription, not a real subject.
   if (isLearnable(text) && !looksDeflecting(reply) && !hasProfanity(text)) {
     pendingOffers.set(convId, { topic: extractTopic(text), at: now() });
-    if (!/\bmake you a page\b/i.test(reply)) reply += ' Want me to make you a page about it?';
+    reply += ' Want me to make you a page about it?';
   } else {
     pendingOffers.delete(convId);
   }
