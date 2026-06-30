@@ -358,7 +358,7 @@ export function Scheduling() {
           <div style={{ textAlign: 'right' }}>
             <label>Server clock</label>
             <div style={{ fontSize: '1.15rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{serverClock}</div>
-            <div className="muted">If this is wrong, the Pi's clock needs syncing (NTP).</div>
+            <div className="muted">If this is wrong, the kiosk's clock needs syncing (NTP).</div>
           </div>
         </div>
       </div>
