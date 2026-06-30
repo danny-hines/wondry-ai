@@ -20,7 +20,7 @@
 }
 
 .kiosk-root { --panel-header: 60px;  /* height of the floating panel controls (expand / initials+✕) */ }
-.kiosk-root { position: fixed; inset: 12px; background: var(--bg); border: 12px solid var(--user, #16b8a6);
+.kiosk-root { position: fixed; inset: 0px; background: var(--bg); border: 12px solid var(--user, #16b8a6);
   border-radius: 26px; display: flex; overflow: hidden; transition: border-color .5s ease, background-color .4s ease, color .4s ease;
   font-family: ui-rounded, "Segoe UI", system-ui, sans-serif; color: var(--fg); }
 
@@ -64,14 +64,14 @@
 #convo { display: flex; flex-direction: column; min-width: 0; min-height: 0; width: 0; opacity: 0; overflow: hidden; transition: width .5s cubic-bezier(.4,0,.2,1), opacity .4s ease; }
 #bubbles { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 8px 6px; }
 
-.state-idle #avatarWrap { transform: scale(1.06); }
+.state-idle #avatarWrap { transform: scale(1.5); }
 .state-idle #convo { width: 0; opacity: 0; }
 .state-idle #right { display: none; }
-.state-conversation #avatarWrap { transform: scale(0.72); }
+.state-conversation #avatarWrap { transform: scale(1); }
 .state-conversation #convo { width: 460px; opacity: 1; align-self: stretch; }
 .state-conversation #right { display: none; }
 .state-split #left { flex: 0 0 36%; flex-direction: column; gap: 10px; padding: 16px; }
-.state-split #avatarWrap { transform: scale(0.5); }
+.state-split #avatarWrap { transform: scale(0.9); }
 .state-split #convo { width: 100%; opacity: 1; flex: 1; }
 /* Absolutely positioned at its final size (the left pane only reserves 36%), so the
    panel's content is laid out once — the open animation just slides this fixed-size

@@ -127,7 +127,7 @@ export default function Kiosk() {
         else if (evt.type === 'face.recognized') { maybeSwitchToFace(evt.profileId); }
         // Wake word heard (on-device sidecar → /api/wake): start listening, same as
         // a face tap. recRef.start() is a no-op if already listening.
-        else if (evt.type === 'wake') { if (viewRef.current === 'idle') setView('conversation'); setHintSeen(true); recRef.current?.start(); bumpIdle(); }
+        else if (evt.type === 'wake') { if (viewRef.current === 'idle' && itemsRef.current.length) setView('conversation'); setHintSeen(true); recRef.current?.start(); bumpIdle(); }
       };
       ws.onclose = () => { if (!closed) setTimeout(connect, 2000); };
     };
@@ -356,8 +356,10 @@ export default function Kiosk() {
   const cancelHold = () => { if (holdTimer.current) { clearTimeout(holdTimer.current); holdTimer.current = null; } };
 
   // Tap-to-talk: toggle a listen session (used by the avatar tap in voice-only mode).
+  // Stay big + centered (idle layout) while listening if there's no conversation yet —
+  // only drop into the split avatar+bubbles layout once there are messages to show.
   const toggleListen = () => {
-    if (viewRef.current === 'idle') setView('conversation');
+    if (viewRef.current === 'idle' && itemsRef.current.length) setView('conversation');
     const r = recRef.current; if (!r) return;
     micLive ? r.stop() : r.start();
   };
