@@ -99,7 +99,9 @@ async function manualDownload(id) {
     log('  • npm run setup-piper                     (re-run)');
     log('  • or set PIPER_CMD in .env to a piper binary path');
   }
-  log('\nTune the voice in config.json -> tts.synthArgs, e.g.:');
-  log('  ["--sentence-silence","0.4","--length-scale","1.1"]   (length-scale > 1 = slower/calmer)');
-  log('Restart the server (npm start), then use the ▶ buttons in the Kids tab to compare voices.');
+  log('\nTune the voice in config.json -> tts (restart after editing):');
+  log('  • defaultVoice — for a faster Pi, "en_US-amy-medium" (~2-3x) or "en_US-lessac-low" (fastest)');
+  log('  • synthesis.length_scale — <1 faster, >1 calmer/slower');
+  log('  • serverEnv {"OMP_NUM_THREADS":"4"} — experiment with Pi threading');
+  log('Use the ▶ buttons in the Kids tab to A/B voices.');
 })();

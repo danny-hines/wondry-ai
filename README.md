@@ -306,13 +306,24 @@ Speech is tuned to start fast and avoid dead air:
   the voice model loaded, so each line skips the per-call model reload (the big win, especially on
   the Pi). Override with `PIPER_HTTP_URL` to point at an externally-run Piper server, or
   `PIPER_HTTP_PORT` to change the managed port. Falls back to spawn-per-call, then browser speech.
-- **Sentence chunking.** The kiosk splits a reply into sentences and plays sentence 1 while
-  fetching sentence 2, so first audio starts almost immediately instead of after the whole reply.
+- **Gapless sentence pipeline.** The kiosk splits a reply into sentences, keeps a few syntheses in
+  flight ahead of playback, and as each clip decodes schedules it on the Web Audio timeline to start
+  the instant the previous one ends — so first audio is fast (sentence 1 alone) *and* there's no
+  decode/scheduling gap between sentences. Each Piper clip keeps its own trailing silence, so the
+  pacing stays natural.
 - **Instant "thinking" filler.** The moment a child submits, the avatar says a short cached line
   ("Hmm, let me think!") to mask the Claude round-trip; the real reply supersedes it when it lands.
 - **Phrase cache.** Repeated lines (fillers, announcements) are cached in memory and replay instantly.
 
-If speech still feels slow to start, the remaining gap is usually Claude generating the reply text
+**Pi synthesis-speed levers** (in `config.json` → `tts`, restart after editing) — if raw Piper synthesis
+is the bottleneck on the Pi rather than the gaps:
+- `defaultVoice` — a `-medium` voice (e.g. `en_US-amy-medium`) synthesizes ~2–3× faster than `-high`,
+  and `en_US-lessac-low` is the fastest (all installed by `setup-piper`; a per-kid voice overrides it).
+- `synthesis.length_scale` — below `1.0` speaks faster (shorter clips), above is calmer.
+- `serverEnv` — extra env for the warm Piper server, e.g. `{"OMP_NUM_THREADS":"4"}` to push all Pi
+  cores (experimental — onnxruntime already multi-threads, so measure it).
+
+If speech still feels slow to *start*, the remaining gap is usually Claude generating the reply text
 (`chat` routing) — that's independent of TTS.
 
 ## Frontend (React + TypeScript) — current architecture

@@ -113,7 +113,11 @@ export async function ensureServer() {
   serverState = (async () => {
     const c = piperCommand();
     const args = ['-m', 'piper.http_server', '--data-dir', voicesDir(), '--port', String(PORT)];
-    try { serverProc = spawn(c[0], args, { stdio: 'ignore' }); }
+    // Extra env for the warm server (config.json -> tts.serverEnv), e.g. OMP_NUM_THREADS
+    // to tune onnxruntime threading on the Pi — a knob to experiment with on hardware.
+    const env = { ...process.env };
+    for (const [k, v] of Object.entries(ttsCfg().serverEnv || {})) env[k] = String(v);
+    try { serverProc = spawn(c[0], args, { stdio: 'ignore', env }); }
     catch { serverState = 'down'; return false; }
     serverProc.on('exit', () => { serverState = 'down'; serverProc = null; });
     const t0 = Date.now();

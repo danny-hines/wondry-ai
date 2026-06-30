@@ -65,7 +65,9 @@
   "tts": {
     "voicesDir": "voices",
     "defaultVoice": "en_US-lessac-high",
-    "synthesis": { "length_scale": 1.05 },
-    "synthArgs": ["--sentence-silence", "0.3"]
-  }
+    "synthesis": { "length_scale": 1.0 },
+    "synthArgs": ["--sentence-silence", "0.3"],
+    "serverEnv": {}
+  },
+  "_comment_tts": "Pi synthesis-speed levers (restart after editing): (1) defaultVoice — 'en_US-amy-medium' synthesizes ~2-3x faster than a '-high' voice and 'en_US-lessac-low' is the fastest (setup-piper installs all of these; a per-kid voice in the Kids tab overrides this). (2) synthesis.length_scale — below 1.0 speaks faster / shorter clips, above 1.0 is calmer/slower. (3) serverEnv — extra environment for the warm Piper server, e.g. {\"OMP_NUM_THREADS\":\"4\"} to push all four Pi cores (experimental: onnxruntime already multi-threads, so measure it). The gapless client scheduler removes the between-sentence gaps; these affect raw synthesis speed."
 }
