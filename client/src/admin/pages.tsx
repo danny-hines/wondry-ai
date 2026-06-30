@@ -242,7 +242,12 @@ export function Kids() {
               <select value={p.voice ?? ''} onChange={(e) => setField(p.id, 'voice', e.target.value)} style={{ width: '100%' }}>
                 <option value="">{voices.length ? '(default voice)' : 'run: npm run setup-piper'}</option>
                 {browserVoice && <option value={browserVoice}>🤖 Robot (on-device, fastest)</option>}
-                {voices.map((v) => <option key={v} value={v}>{v}</option>)}
+                {voices.some((v) => !v.startsWith('kokoro:')) && (
+                  <optgroup label="Piper">{voices.filter((v) => !v.startsWith('kokoro:')).map((v) => <option key={v} value={v}>{v}</option>)}</optgroup>
+                )}
+                {voices.some((v) => v.startsWith('kokoro:')) && (
+                  <optgroup label="Kokoro (more natural)">{voices.filter((v) => v.startsWith('kokoro:')).map((v) => <option key={v} value={v}>{v.slice(7)}</option>)}</optgroup>
+                )}
               </select></div>
             <div><label>Assistant personality (future)</label><input value={p.persona ?? ''} onChange={(e) => setField(p.id, 'persona', e.target.value)} placeholder="e.g. playful and patient" style={{ width: '100%' }} /></div>
             <div><label>Interests (themes reading stories)</label><input value={p.interests ?? ''} onChange={(e) => setField(p.id, 'interests', e.target.value)} placeholder="dinosaurs, space, Minecraft" style={{ width: '100%' }} /></div>

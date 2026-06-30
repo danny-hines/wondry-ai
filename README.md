@@ -323,6 +323,16 @@ is the bottleneck on the Pi rather than the gaps:
 - `serverEnv` — extra env for the warm Piper server, e.g. `{"OMP_NUM_THREADS":"4"}` to push all Pi
   cores (experimental — onnxruntime already multi-threads, so measure it).
 
+**Kokoro (optional, more natural).** A second TTS engine alongside Piper. Run a Kokoro server —
+[Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI) is OpenAI-compatible — then set
+`config.json` → `tts.kokoro.url` to its `/v1/audio/speech` endpoint (or env `KOKORO_URL`); empty = off.
+Its voices then show up in the **Kids → Voice** picker (stored as `kokoro:<name>`), so you choose per
+child. The three engines are independent — **browser** is always available, Piper and Kokoro are each
+optional, so you can run either, neither, or both. Kokoro audio flows through the same gapless scheduler
+and avatar lip-sync, no client changes. Caveat: Kokoro is heavier than Piper and has no GPU on the Pi —
+confirm it synthesizes **faster than real time** on the Pi 5, or the gapless pipeline will still wait on
+it; pair it with a fast Piper voice for kids where speed matters more than naturalness.
+
 If speech still feels slow to *start*, the remaining gap is usually Claude generating the reply text
 (`chat` routing) — that's independent of TTS.
 

@@ -68,10 +68,25 @@ export function piperCommand() {
   return _cmd;
 }
 
-export function listVoices() {
+// Installed Piper voice models (bare ids like "en_US-amy-medium").
+export function piperVoices() {
   try {
     return fs.readdirSync(voicesDir()).filter((f) => f.endsWith('.onnx')).map((f) => f.replace(/\.onnx$/, '')).sort();
   } catch { return []; }
+}
+
+// --- Kokoro: optional, more-natural neural TTS, run as a separate OpenAI-compatible
+// server (e.g. Kokoro-FastAPI) that we POST to — like PIPER_HTTP_URL, the app stays
+// decoupled from Kokoro's install. Configured in config.json -> tts.kokoro (or env
+// KOKORO_URL). A kid's voice is stored "kokoro:<name>" so synthesize() routes it here. ---
+function kokoroCfg() { return ttsCfg().kokoro || {}; }
+export function kokoroUrl() { return process.env.KOKORO_URL || kokoroCfg().url || ''; }
+export function kokoroEnabled() { return !!kokoroUrl(); }
+export function kokoroVoices() { return kokoroEnabled() ? (kokoroCfg().voices || []) : []; }
+
+// Every voice for the per-kid picker: Piper (bare ids) + Kokoro ("kokoro:"-prefixed).
+export function listVoices() {
+  return [...piperVoices(), ...kokoroVoices().map((v) => 'kokoro:' + v)];
 }
 function voiceFile(voiceId) {
   const dir = voicesDir();
@@ -79,11 +94,11 @@ function voiceFile(voiceId) {
   if (want && fs.existsSync(want)) return want;
   const def = path.join(dir, `${ttsCfg().defaultVoice || ''}.onnx`);
   if (fs.existsSync(def)) return def;
-  const any = listVoices()[0];
+  const any = piperVoices()[0];
   return any ? path.join(dir, `${any}.onnx`) : null;
 }
 export function ttsAvailable() {
-  return !!process.env.PIPER_HTTP_URL || listVoices().length > 0;
+  return !!process.env.PIPER_HTTP_URL || kokoroEnabled() || piperVoices().length > 0;
 }
 
 // ---- in-memory phrase cache (capped) ----
@@ -109,7 +124,7 @@ export async function ensureServer() {
   if (serverState === 'up') return true;
   if (serverState === 'down') return false;
   if (serverState && typeof serverState.then === 'function') return serverState;
-  if (!canManageServer() || listVoices().length === 0) { serverState = 'down'; return false; }
+  if (!canManageServer() || piperVoices().length === 0) { serverState = 'down'; return false; }
   serverState = (async () => {
     const c = piperCommand();
     const args = ['-m', 'piper.http_server', '--data-dir', voicesDir(), '--port', String(PORT)];
@@ -166,11 +181,28 @@ function synthViaSpawn(text, voiceId) {
   });
 }
 
+// Synthesize one chunk via the Kokoro server (OpenAI-compatible /v1/audio/speech).
+async function synthViaKokoro(text, voiceName) {
+  const k = kokoroCfg();
+  const body = {
+    model: k.model || 'kokoro', input: text,
+    voice: voiceName || (k.voices && k.voices[0]) || 'af_bella',
+    response_format: 'wav', speed: k.speed || 1.0,
+  };
+  const r = await fetch(kokoroUrl(), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  if (!r.ok) { const t = await r.text().catch(() => ''); throw new Error(`kokoro http ${r.status}: ${t.slice(0, 200)}`); }
+  return Buffer.from(await r.arrayBuffer());
+}
+
 export async function synthesize(text, voiceId) {
   const key = (voiceId || ttsCfg().defaultVoice || '') + '|' + text;
   const hit = cacheGet(key);
   if (hit) return hit;
-  const wav = (await ensureServer()) ? await synthViaHttp(text, voiceId) : await synthViaSpawn(text, voiceId);
+  // Route by engine: "kokoro:<name>" → Kokoro server; anything else → Piper (warm
+  // server, else spawn). Browser/robot is handled earlier in the route.
+  const wav = (voiceId && voiceId.startsWith('kokoro:'))
+    ? await synthViaKokoro(text, voiceId.slice(7))
+    : (await ensureServer()) ? await synthViaHttp(text, voiceId) : await synthViaSpawn(text, voiceId);
   cachePut(key, wav);
   return wav;
 }

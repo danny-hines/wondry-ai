@@ -67,7 +67,9 @@
     "defaultVoice": "en_US-lessac-high",
     "synthesis": { "length_scale": 1.0 },
     "synthArgs": ["--sentence-silence", "0.3"],
-    "serverEnv": {}
+    "serverEnv": {},
+    "kokoro": { "url": "", "model": "kokoro", "speed": 1.0, "voices": ["af_bella", "af_heart", "af_sky", "am_adam", "bf_emma", "bm_george"] }
   },
-  "_comment_tts": "Pi synthesis-speed levers (restart after editing): (1) defaultVoice — 'en_US-amy-medium' synthesizes ~2-3x faster than a '-high' voice and 'en_US-lessac-low' is the fastest (setup-piper installs all of these; a per-kid voice in the Kids tab overrides this). (2) synthesis.length_scale — below 1.0 speaks faster / shorter clips, above 1.0 is calmer/slower. (3) serverEnv — extra environment for the warm Piper server, e.g. {\"OMP_NUM_THREADS\":\"4\"} to push all four Pi cores (experimental: onnxruntime already multi-threads, so measure it). The gapless client scheduler removes the between-sentence gaps; these affect raw synthesis speed."
+  "_comment_tts": "Pi synthesis-speed levers (restart after editing): (1) defaultVoice — 'en_US-amy-medium' synthesizes ~2-3x faster than a '-high' voice and 'en_US-lessac-low' is the fastest (setup-piper installs all of these; a per-kid voice in the Kids tab overrides this). (2) synthesis.length_scale — below 1.0 speaks faster / shorter clips, above 1.0 is calmer/slower. (3) serverEnv — extra environment for the warm Piper server, e.g. {\"OMP_NUM_THREADS\":\"4\"} to push all four Pi cores (experimental: onnxruntime already multi-threads, so measure it). The gapless client scheduler removes the between-sentence gaps; these affect raw synthesis speed.",
+  "_comment_kokoro": "Kokoro = optional, more-natural neural TTS. Run a Kokoro server (e.g. Kokoro-FastAPI, OpenAI-compatible) and set tts.kokoro.url to its /v1/audio/speech endpoint (or env KOKORO_URL); empty = disabled. Its voices then appear in the Kids-tab picker (stored as 'kokoro:<name>'). Browser voice is always available and Piper stays independent, so you can run either, neither, or both. Note: Kokoro is heavier than Piper — confirm it keeps up (real-time) on the Pi 5 CPU; use it for kids where naturalness matters and a faster Piper voice where it doesn't."
 }
