@@ -12,7 +12,11 @@
 export const STT = {
   backend: 'mock',
   async transcribe(/* pcmBuffer */) {
-    return { text: '', backend: 'mock', note: 'Real adapter lives in services/stt.js; this stub is unused.' };
+    return {
+      text: '',
+      backend: 'mock',
+      note: 'Real adapter lives in services/stt.js; this stub is unused.',
+    };
   },
 };
 
@@ -30,5 +34,7 @@ export const TTS = {
 // greets on. The UI only ever reacts to events; it never touches the camera.
 export const Presence = {
   backend: 'mock',
-  start(/* emit */) { /* real adapter lives in services/presence.js + routes/presence.js */ },
+  start(/* emit */) {
+    /* real adapter lives in services/presence.js + routes/presence.js */
+  },
 };

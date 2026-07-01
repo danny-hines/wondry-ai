@@ -10,10 +10,31 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MEDIA_DIR = path.join(__dirname, '..', '..', 'artifacts', 'media');
 fs.mkdirSync(MEDIA_DIR, { recursive: true });
 
-export function saveMedia({ source, query, bytes, mime, ext = 'jpg', alt, credit, license, sourceUrl }) {
+export function saveMedia({
+  source,
+  query,
+  bytes,
+  mime,
+  ext = 'jpg',
+  alt,
+  credit,
+  license,
+  sourceUrl,
+}) {
   const id = uid();
   fs.writeFileSync(path.join(MEDIA_DIR, `${id}.${ext}`), Buffer.from(bytes));
-  insertMedia({ id, source, query, mime, ext, alt, credit, license, source_url: sourceUrl, bytes: bytes.byteLength ?? bytes.length });
+  insertMedia({
+    id,
+    source,
+    query,
+    mime,
+    ext,
+    alt,
+    credit,
+    license,
+    source_url: sourceUrl,
+    bytes: bytes.byteLength ?? bytes.length,
+  });
   return id;
 }
 

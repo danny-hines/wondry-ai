@@ -7,11 +7,11 @@ type, not editing core code.
 
 ## The three render strata — pick one
 
-| `renderer` | What it is | Use for | Trust |
-|---|---|---|---|
-| `declarative` | Model emits JSON composed of the **widget kit** (`server/content/declarative.js`); the client's `DeclarativeRenderer` draws it. | Most educational content: study sets, illustrated explainers, quizzes, math, language. | Pure data — safest; OK for less-trusted contributions. |
-| `native` | A hand-built React component fed by generated JSON config. | Real interaction logic / device features: games, anything using the mic. | Code in the kiosk — first-party / reviewed only. |
-| `sandbox-html` | Model writes arbitrary HTML, served behind the CSP sandbox iframe. | One-off freeform creativity nothing else fits. | Sealed by CSP, but unpredictable — the escape hatch. |
+| `renderer`     | What it is                                                                                                                      | Use for                                                                                | Trust                                                  |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `declarative`  | Model emits JSON composed of the **widget kit** (`server/content/declarative.js`); the client's `DeclarativeRenderer` draws it. | Most educational content: study sets, illustrated explainers, quizzes, math, language. | Pure data — safest; OK for less-trusted contributions. |
+| `native`       | A hand-built React component fed by generated JSON config.                                                                      | Real interaction logic / device features: games, anything using the mic.               | Code in the kiosk — first-party / reviewed only.       |
+| `sandbox-html` | Model writes arbitrary HTML, served behind the CSP sandbox iframe.                                                              | One-off freeform creativity nothing else fits.                                         | Sealed by CSP, but unpredictable — the escape hatch.   |
 
 **Prefer `declarative`.** Reach for `native` only when you need logic the widget
 kit can't express; extend the kit (a new widget) before adding a native type.
@@ -23,23 +23,31 @@ in `server/content/index.js`. Shape (all hooks optional except `generate`):
 
 ```js
 export default {
-  id: 'mathdrill', label: 'Math drill', emoji: '➗',
-  renderer: 'declarative', ext: 'json',
-  uses: { mic: false, media: false, network: false },   // capability surface (shown to parents)
+  id: 'mathdrill',
+  label: 'Math drill',
+  emoji: '➗',
+  renderer: 'declarative',
+  ext: 'json',
+  uses: { mic: false, media: false, network: false }, // capability surface (shown to parents)
   defaultColor: '#f59e0b',
   triggersHelp: 'e.g. "practice adding"',
   createForm: [{ key: 'skill', label: 'Skill', type: 'text', placeholder: 'addition to 10' }],
 
-  matchIntent: (text) => /practice (math|adding)/i.test(text) ? { skill: '...' } : null,
+  matchIntent: (text) => (/practice (math|adding)/i.test(text) ? { skill: '...' } : null),
   intentReply: (params) => `Let's practice ${params.skill}!`,
-  prepare: ({ params, profile }) => ({ ...params }),     // resolve/augment once (optional)
+  prepare: ({ params, profile }) => ({ ...params }), // resolve/augment once (optional)
   plan: ({ params, profile }) => ({ title, emoji, color, subject, plan }), // placeholder card (optional)
-  async generate({ params, profile }) {                  // REQUIRED
+  async generate({ params, profile }) {
+    // REQUIRED
     // declarative: build a doc, normalizeDoc + checkDeclarativeContent + (optional) resolveDocImages
     return { data, meta: { title, emoji, color, subject, plan } };
   },
-  recordEvent({ artifactId, profileId, event }) { /* recordProgressEvent(...) */ },  // optional
-  summary(profileId) { /* progressEvents(profileId, id) -> rollup */ },               // optional
+  recordEvent({ artifactId, profileId, event }) {
+    /* recordProgressEvent(...) */
+  }, // optional
+  summary(profileId) {
+    /* progressEvents(profileId, id) -> rollup */
+  }, // optional
 };
 ```
 

@@ -1,0 +1,29 @@
+# Dependencies & build output
+node_modules
+client/node_modules
+client/dist
+dist
+
+# Lockfiles & generated data
+package-lock.json
+client/package-lock.json
+data
+artifacts
+
+# Downloaded / vendored assets (not our source)
+voices
+vendor
+.venv-piper
+.venv-kokoro
+**/__pycache__
+
+# config.json uses deliberate column alignment (the provider/routing tables) that
+# reads as a spec sheet; Prettier would collapse it. Keep it hand-formatted.
+config.json
+
+# CSS is kept intentionally dense (one selector = one line, scannable). Prettier would
+# expand every declaration to its own line and ~4x the file length. Format CSS by hand.
+*.css
+
+# Local, untracked planning doc
+ROADMAP.md

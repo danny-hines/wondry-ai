@@ -15,11 +15,16 @@ let ctx: AudioContext | null = null;
 let keepalive: { osc: OscillatorNode; gain: GainNode } | null = null;
 
 function numParam(key: string): number | null {
-  try { const v = parseFloat(new URLSearchParams(location.search).get(key) ?? ''); return Number.isFinite(v) ? v : null; } catch { return null; }
+  try {
+    const v = parseFloat(new URLSearchParams(location.search).get(key) ?? '');
+    return Number.isFinite(v) ? v : null;
+  } catch {
+    return null;
+  }
 }
 const urlHz = numParam('warmHz');
 const urlGain = numParam('warmGain');
-let warmHz = urlHz ?? 0;          // 0 = keepalive off until the server config / CLI sets it
+let warmHz = urlHz ?? 0; // 0 = keepalive off until the server config / CLI sets it
 let warmGain = urlGain ?? 0.02;
 
 const belowNyquist = (c: AudioContext, hz: number) => Math.min(hz, c.sampleRate / 2 - 1000);
@@ -34,14 +39,21 @@ function retune() {
     osc.type = 'sine';
     osc.frequency.value = belowNyquist(ctx, warmHz);
     gain.gain.value = warmGain;
-    osc.connect(gain); gain.connect(ctx.destination);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
     osc.start();
     keepalive = { osc, gain };
   } else if (on && keepalive) {
     keepalive.osc.frequency.value = belowNyquist(ctx, warmHz);
     keepalive.gain.gain.value = warmGain;
   } else if (!on && keepalive) {
-    try { keepalive.osc.stop(); keepalive.osc.disconnect(); keepalive.gain.disconnect(); } catch { /* already gone */ }
+    try {
+      keepalive.osc.stop();
+      keepalive.osc.disconnect();
+      keepalive.gain.disconnect();
+    } catch {
+      /* already gone */
+    }
     keepalive = null;
   }
 }
@@ -50,13 +62,26 @@ function retune() {
 // the browser suspended it — must be called from within a user gesture the first time
 // (autoplay policy), which on the kiosk is the first tap.
 export function audioCtx(): AudioContext {
-  if (!ctx) { ctx = new (window.AudioContext || (window as any).webkitAudioContext)(); retune(); }
-  if (ctx.state === 'suspended') ctx.resume().then(retune).catch(() => {});
+  if (!ctx) {
+    ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    retune();
+  }
+  if (ctx.state === 'suspended')
+    ctx
+      .resume()
+      .then(retune)
+      .catch(() => {});
   return ctx;
 }
 
 // Call on the kiosk's first user interaction so the device is warm before any sound.
-export function primeAudio() { try { audioCtx(); } catch { /* no audio */ } }
+export function primeAudio() {
+  try {
+    audioCtx();
+  } catch {
+    /* no audio */
+  }
+}
 
 // Apply keepalive params (from the server config or a `wondry audio` broadcast). Retunes
 // live — no reload. A URL override wins so manual ?warmHz=… testing isn't clobbered.
@@ -76,9 +101,11 @@ export function playTestTone() {
   const gain = c.createGain();
   osc.type = 'square';
   osc.frequency.value = 660;
-  osc.connect(gain); gain.connect(c.destination);
-  gain.gain.setValueAtTime(0.2, t0);                       // instant onset — exposes clipping
+  osc.connect(gain);
+  gain.connect(c.destination);
+  gain.gain.setValueAtTime(0.2, t0); // instant onset — exposes clipping
   gain.gain.setValueAtTime(0.2, t0 + 0.18);
   gain.gain.linearRampToValueAtTime(0.0001, t0 + 0.22);
-  osc.start(t0); osc.stop(t0 + 0.24);
+  osc.start(t0);
+  osc.stop(t0 + 0.24);
 }

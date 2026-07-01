@@ -8,11 +8,20 @@ import path from 'node:path';
 import fs from 'node:fs';
 
 process.env.WONDRY_DB = path.join(os.tmpdir(), `wondry-tz-test-${process.pid}.db`);
-for (const f of [process.env.WONDRY_DB, process.env.WONDRY_DB + '-wal', process.env.WONDRY_DB + '-shm']) { try { fs.rmSync(f); } catch {} }
+for (const f of [
+  process.env.WONDRY_DB,
+  process.env.WONDRY_DB + '-wal',
+  process.env.WONDRY_DB + '-shm',
+]) {
+  try {
+    fs.rmSync(f);
+  } catch {}
+}
 
 const { initSchema } = await import('../server/db.js');
 initSchema();
-const { zonedWallTimeToEpoch, localInputToEpoch, isValidTimezone, partsInZone, formatClock } = await import('../server/services/timezone.js');
+const { zonedWallTimeToEpoch, localInputToEpoch, isValidTimezone, partsInZone, formatClock } =
+  await import('../server/services/timezone.js');
 
 const NY = 'America/New_York';
 
@@ -32,7 +41,9 @@ test('round-trips back to the same wall clock', () => {
   const wall = { year: 2026, month: 3, day: 20, hour: 6, minute: 30 };
   const epoch = zonedWallTimeToEpoch(wall, NY);
   const p = partsInZone(epoch, NY);
-  assert.equal(p.hour, 6); assert.equal(p.minute, 30); assert.equal(p.day, 20);
+  assert.equal(p.hour, 6);
+  assert.equal(p.minute, 30);
+  assert.equal(p.day, 20);
 });
 
 test('spring forward: 8:00 AM the morning of DST start (Mar 8 2026) is EDT', () => {

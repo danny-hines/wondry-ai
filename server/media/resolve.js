@@ -9,7 +9,9 @@ import { getSource, allSources } from './registry.js';
 import { saveMedia } from './store.js';
 import './index.js'; // register sources
 
-function imagesCfg(override) { return override || (getConfig().media && getConfig().media.images) || {}; }
+function imagesCfg(override) {
+  return override || (getConfig().media && getConfig().media.images) || {};
+}
 function enabledSourceIds(cfg) {
   if (cfg.sources && cfg.sources.length) return cfg.sources;
   return allSources().map((s) => s.id);
@@ -25,9 +27,21 @@ export async function resolveImage(query, override) {
     try {
       const r = await src.resolve(query, { maxBytes: cfg.maxBytes || 3_000_000 });
       if (!r) continue;
-      const mediaId = saveMedia({ source: id, query, bytes: r.bytes, mime: r.mime, ext: r.ext, alt: query, credit: r.credit, license: r.license, sourceUrl: r.sourceUrl });
+      const mediaId = saveMedia({
+        source: id,
+        query,
+        bytes: r.bytes,
+        mime: r.mime,
+        ext: r.ext,
+        alt: query,
+        credit: r.credit,
+        license: r.license,
+        sourceUrl: r.sourceUrl,
+      });
       return { mediaId, credit: r.credit, alt: query };
-    } catch { /* try next source */ }
+    } catch {
+      /* try next source */
+    }
   }
   return null;
 }
@@ -40,11 +54,17 @@ export async function resolveDocImages(doc, override) {
   const max = cfg.maxPerArtifact || 3;
   const out = [];
   let used = 0;
-  for (const b of (doc.blocks || [])) {
-    if (b.type !== 'image') { out.push(b); continue; }
+  for (const b of doc.blocks || []) {
+    if (b.type !== 'image') {
+      out.push(b);
+      continue;
+    }
     if (disabled || used >= max) continue; // drop image requests we won't fulfill
     const res = await resolveImage(b.query, cfg);
-    if (res) { out.push({ ...b, mediaId: res.mediaId, credit: res.credit, alt: b.alt || res.alt }); used++; }
+    if (res) {
+      out.push({ ...b, mediaId: res.mediaId, credit: res.credit, alt: b.alt || res.alt });
+      used++;
+    }
     // else: drop the unresolved image block
   }
   doc.blocks = out;
@@ -56,7 +76,10 @@ export async function resolveDocImages(doc, override) {
 export function imageSourceHints(override) {
   const cfg = imagesCfg(override);
   if (cfg.enabled === false) return '';
-  const hints = enabledSourceIds(cfg).map((id) => getSource(id)).filter(Boolean).map((s) => `- ${s.label}: ${s.capabilities}`);
+  const hints = enabledSourceIds(cfg)
+    .map((id) => getSource(id))
+    .filter(Boolean)
+    .map((s) => `- ${s.label}: ${s.capabilities}`);
   return hints.join('\n');
 }
 
@@ -71,8 +94,18 @@ export function mediaAgenticEnabled(override) {
 export function imageTool() {
   return {
     name: 'find_image',
-    description: 'Find one real, kid-appropriate photo illustrating a concept, from trusted sources. Call this BEFORE adding any image. Returns {available, mediaId, credit}. Only add an {"type":"image","mediaId":"<the id>","alt":"..."} block when available is true.',
-    input_schema: { type: 'object', properties: { query: { type: 'string', description: 'short description of the photo to find, e.g. "a red panda in a tree"' } }, required: ['query'] },
+    description:
+      'Find one real, kid-appropriate photo illustrating a concept, from trusted sources. Call this BEFORE adding any image. Returns {available, mediaId, credit}. Only add an {"type":"image","mediaId":"<the id>","alt":"..."} block when available is true.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'short description of the photo to find, e.g. "a red panda in a tree"',
+        },
+      },
+      required: ['query'],
+    },
     handler: async ({ query }) => {
       const r = await resolveImage(query);
       return r ? { available: true, mediaId: r.mediaId, credit: r.credit } : { available: false };
@@ -82,6 +115,8 @@ export function imageTool() {
 
 // Drop image blocks whose mediaId the model invented (must match a real baked row).
 export function validateDocMedia(doc) {
-  doc.blocks = (doc.blocks || []).filter((b) => b.type !== 'image' || (b.mediaId && getMedia(b.mediaId)));
+  doc.blocks = (doc.blocks || []).filter(
+    (b) => b.type !== 'image' || (b.mediaId && getMedia(b.mediaId)),
+  );
   return doc;
 }

@@ -7,7 +7,11 @@ import { parseTimer, formatDuration } from '../server/services/timerParse.js';
 const MIN = 1000 * 60;
 
 test('digit durations with units', () => {
-  assert.deepEqual(parseTimer('set a timer for 5 minutes'), { action: 'set', durationMs: 5 * MIN, label: null });
+  assert.deepEqual(parseTimer('set a timer for 5 minutes'), {
+    action: 'set',
+    durationMs: 5 * MIN,
+    label: null,
+  });
   assert.equal(parseTimer('timer for 90 seconds').durationMs, 90 * 1000);
   assert.equal(parseTimer('start a 2 hour timer').durationMs, 2 * 3600000);
 });
@@ -46,7 +50,7 @@ test('"set a reminder to X in N minutes" → timer with clean label', () => {
   const r = parseTimer('set a reminder to water the plants in 1 minute');
   assert.equal(r.action, 'set');
   assert.equal(r.durationMs, MIN);
-  assert.equal(r.label, 'water the plants');   // not "water the plants in 1 minute"
+  assert.equal(r.label, 'water the plants'); // not "water the plants in 1 minute"
 });
 
 test('absolute clock times are NOT timers (fall through to reminder parser)', () => {
@@ -63,13 +67,13 @@ test('cancel phrasings', () => {
 
 test('clamps absurd durations and tiny ones', () => {
   assert.equal(parseTimer('set a timer for 100 hours').durationMs, 6 * 3600000); // MAX 6h
-  assert.equal(parseTimer('set a timer for 1 second').durationMs, 3000);          // MIN 3s
+  assert.equal(parseTimer('set a timer for 1 second').durationMs, 3000); // MIN 3s
 });
 
 test('non-timer utterances return null', () => {
   assert.equal(parseTimer('tell me about dinosaurs'), null);
-  assert.equal(parseTimer('what time is it'), null);          // no "timer", no duration
-  assert.equal(parseTimer('set a timer'), null);              // no duration
+  assert.equal(parseTimer('what time is it'), null); // no "timer", no duration
+  assert.equal(parseTimer('set a timer'), null); // no duration
   assert.equal(parseTimer('how many minutes in an hour'), null); // no "timer" word
 });
 

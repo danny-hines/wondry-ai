@@ -15,8 +15,22 @@ initSchema();
 
 // --- profiles (placeholder kids; edit in the portal) ---
 const PROFILES = [
-  { name: 'Theo',   initials: 'TH', color: '#16b8a6', age: 7, reading_level: 'early reader', theme: 'light' },
-  { name: 'Ella',   initials: 'EL', color: '#3b82f6', age: 5, reading_level: 'pre-reader',  theme: 'dark'  },
+  {
+    name: 'Theo',
+    initials: 'TH',
+    color: '#16b8a6',
+    age: 7,
+    reading_level: 'early reader',
+    theme: 'light',
+  },
+  {
+    name: 'Ella',
+    initials: 'EL',
+    color: '#3b82f6',
+    age: 5,
+    reading_level: 'pre-reader',
+    theme: 'dark',
+  },
 ];
 const existing = db.prepare('SELECT COUNT(*) n FROM profiles').get().n;
 const ids = {};
@@ -24,8 +38,9 @@ if (existing === 0) {
   for (const p of PROFILES) {
     const id = uid();
     ids[p.name] = id;
-    db.prepare('INSERT INTO profiles (id,name,initials,color,age,reading_level,theme,created_at) VALUES (?,?,?,?,?,?,?,?)')
-      .run(id, p.name, p.initials, p.color, p.age, p.reading_level, p.theme || 'light', now());
+    db.prepare(
+      'INSERT INTO profiles (id,name,initials,color,age,reading_level,theme,created_at) VALUES (?,?,?,?,?,?,?,?)',
+    ).run(id, p.name, p.initials, p.color, p.age, p.reading_level, p.theme || 'light', now());
   }
   console.log('Seeded profiles:', Object.keys(ids).join(', '));
 } else {
@@ -50,11 +65,26 @@ if (haveArtifacts === 0) {
     const r = await runArtifact({ topic: s.topic, profile, system: getArtifactSystemPrompt() });
     const id = uid();
     fs.writeFileSync(path.join(ARTIFACT_DIR, `${id}.html`), r.html, 'utf8');
-    db.prepare(`INSERT INTO artifacts
+    db.prepare(
+      `INSERT INTO artifacts
       (id,title,prompt,profile_id,source,status,subject,reading_level,plan,emoji,color,published,created_at,ready_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-      .run(id, r.title, s.topic, profileId, s.source, 'ready', s.topic, profile.reading_level,
-           r.plan || '', r.emoji || pickEmoji(s.topic), r.color || profile.color, 1, now(), now());
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      id,
+      r.title,
+      s.topic,
+      profileId,
+      s.source,
+      'ready',
+      s.topic,
+      profile.reading_level,
+      r.plan || '',
+      r.emoji || pickEmoji(s.topic),
+      r.color || profile.color,
+      1,
+      now(),
+      now(),
+    );
     setAudience(id, profileId, true); // publish to the kid it was made for
     console.log('Seeded lesson:', r.title, `(${s.who})`);
   }

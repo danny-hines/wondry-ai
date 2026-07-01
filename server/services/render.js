@@ -11,7 +11,7 @@ let browserP = null;
 async function getBrowser() {
   if (!browserP) {
     browserP = (async () => {
-      const { chromium } = await import('playwright');   // throws if not installed
+      const { chromium } = await import('playwright'); // throws if not installed
       return chromium.launch({ args: ['--no-sandbox'] });
     })();
   }
@@ -20,7 +20,10 @@ async function getBrowser() {
 
 // Returns { base64, mediaType } of a full-page PNG, or null if rendering isn't
 // possible (no Playwright/Chromium, missing file, or a render error).
-export async function screenshotPage(artifactId, { width = 900, height = 1200, settleMs = 1200 } = {}) {
+export async function screenshotPage(
+  artifactId,
+  { width = 900, height = 1200, settleMs = 1200 } = {},
+) {
   const file = artifactPath(artifactId);
   if (!fs.existsSync(file)) return null;
   let page = null;
@@ -28,17 +31,30 @@ export async function screenshotPage(artifactId, { width = 900, height = 1200, s
     const browser = await getBrowser();
     page = await browser.newPage({ viewport: { width, height } });
     await page.goto(pathToFileURL(file).href, { waitUntil: 'load', timeout: 15000 });
-    await page.waitForTimeout(settleMs);              // let JS/animations settle
+    await page.waitForTimeout(settleMs); // let JS/animations settle
     const buf = await page.screenshot({ fullPage: true });
     return { base64: buf.toString('base64'), mediaType: 'image/png' };
-  } catch { return null; }
-  finally { try { await page?.close(); } catch {} }
+  } catch {
+    return null;
+  } finally {
+    try {
+      await page?.close();
+    } catch {}
+  }
 }
 
 export async function renderingAvailable() {
-  try { await getBrowser(); return true; } catch { return false; }
+  try {
+    await getBrowser();
+    return true;
+  } catch {
+    return false;
+  }
 }
 export async function closeBrowser() {
-  try { const b = await browserP; await b?.close(); } catch {}
+  try {
+    const b = await browserP;
+    await b?.close();
+  } catch {}
   browserP = null;
 }

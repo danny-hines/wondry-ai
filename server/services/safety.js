@@ -5,8 +5,17 @@ import { getConfig } from '../config.js';
 import { db, uid, now } from '../db.js';
 
 function log(profile_id, stage, verdict, reason, sample) {
-  db.prepare('INSERT INTO safety_log (id,profile_id,stage,verdict,reason,sample,created_at) VALUES (?,?,?,?,?,?,?)')
-    .run(uid(), profile_id || null, stage, verdict, reason || null, (sample || '').slice(0, 200), now());
+  db.prepare(
+    'INSERT INTO safety_log (id,profile_id,stage,verdict,reason,sample,created_at) VALUES (?,?,?,?,?,?,?)',
+  ).run(
+    uid(),
+    profile_id || null,
+    stage,
+    verdict,
+    reason || null,
+    (sample || '').slice(0, 200),
+    now(),
+  );
 }
 
 // Whole-word profanity mask/detect for kid/avatar text + page topics (see profanity.js).
@@ -28,7 +37,10 @@ export function checkInput(text, profile) {
 // same blocked keywords as kid input before we store/serve the lesson.
 export function checkReadingContent(lesson, profile) {
   const cfg = getConfig().safety;
-  const text = ((lesson && lesson.pages) || []).flatMap((p) => p.lines || []).join(' ').toLowerCase();
+  const text = ((lesson && lesson.pages) || [])
+    .flatMap((p) => p.lines || [])
+    .join(' ')
+    .toLowerCase();
   const hit = cfg.blockedTopics.find((w) => new RegExp(`\\b${w}`, 'i').test(text));
   const verdict = hit ? 'block' : 'pass';
   log(profile?.id, 'reading', verdict, hit ? `matched "${hit}"` : null, text);

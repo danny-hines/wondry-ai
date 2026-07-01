@@ -28,7 +28,7 @@ const BOOT_ID = Date.now();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 initSchema();
-initScheduler();   // re-arm timers that were pending across a restart
+initScheduler(); // re-arm timers that were pending across a restart
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
@@ -46,7 +46,14 @@ app.use('/api', audio);
 app.use('/api/admin', admin);
 
 app.get('/api/health', (req, res) =>
-  res.json({ ok: true, boot: BOOT_ID, managed: isManaged(), liveGeneration: liveGenerationEnabled(), tts: ttsAvailable() }));
+  res.json({
+    ok: true,
+    boot: BOOT_ID,
+    managed: isManaged(),
+    liveGeneration: liveGenerationEnabled(),
+    tts: ttsAvailable(),
+  }),
+);
 
 // Serve the built React app (client/dist) with SPA history fallback so a reload on
 // /admin/pages etc. still loads the app. /api and /ws are excluded. In dev the
@@ -60,10 +67,15 @@ if (hasBuild) {
     res.sendFile(path.join(DIST, 'index.html'));
   });
 } else {
-  app.get('/', (req, res) => res.type('html').send(
-    '<body style="font-family:system-ui;padding:40px"><h2>Wondry</h2>' +
-    '<p>No client build found. For development run <code>npm run dev</code> (Vite + HMR on :5173). ' +
-    'For production run <code>npm run build</code> then <code>npm start</code>.</p></body>'));
+  app.get('/', (req, res) =>
+    res
+      .type('html')
+      .send(
+        '<body style="font-family:system-ui;padding:40px"><h2>Wondry</h2>' +
+          '<p>No client build found. For development run <code>npm run dev</code> (Vite + HMR on :5173). ' +
+          'For production run <code>npm run build</code> then <code>npm start</code>.</p></body>',
+      ),
+  );
 }
 
 const server = http.createServer(app);
@@ -78,8 +90,17 @@ server.listen(PORT, () => {
   console.log(`\n  Wondry running → http://localhost:${PORT}`);
   console.log(`  Kiosk:  http://localhost:${PORT}/`);
   console.log(`  Admin:  http://localhost:${PORT}/admin/`);
-  console.log(`  Frontend: ${hasBuild ? 'serving client/dist' : 'NOT built (run npm run build, or npm run dev for HMR)'}`);
-  console.log(`  Generation: ${liveGenerationEnabled() ? 'LIVE (Claude)' : 'MOCK (no API key set)'}`);
-  console.log(`  TTS: ${ttsAvailable() ? 'Piper (voices installed)' : 'browser fallback (run: npm run setup-piper)'}\n`);
-  if (ttsAvailable()) ensureServer().then((up) => up && console.log('  TTS: warm Piper server ready')).catch(() => {});
+  console.log(
+    `  Frontend: ${hasBuild ? 'serving client/dist' : 'NOT built (run npm run build, or npm run dev for HMR)'}`,
+  );
+  console.log(
+    `  Generation: ${liveGenerationEnabled() ? 'LIVE (Claude)' : 'MOCK (no API key set)'}`,
+  );
+  console.log(
+    `  TTS: ${ttsAvailable() ? 'Piper (voices installed)' : 'browser fallback (run: npm run setup-piper)'}\n`,
+  );
+  if (ttsAvailable())
+    ensureServer()
+      .then((up) => up && console.log('  TTS: warm Piper server ready'))
+      .catch(() => {});
 });

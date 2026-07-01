@@ -12,8 +12,12 @@ import { getConfig } from '../config.js';
 
 let last = { state: 'absent', at: 0 };
 
-export function presenceEnabled() { return !!(getConfig().presence && getConfig().presence.enabled); }
-export function getPresence() { return { ...last, enabled: presenceEnabled() }; }
+export function presenceEnabled() {
+  return !!(getConfig().presence && getConfig().presence.enabled);
+}
+export function getPresence() {
+  return { ...last, enabled: presenceEnabled() };
+}
 
 // Record a presence state from the detector (or a manual test POST) and broadcast it.
 export function setPresence(state, meta = {}) {

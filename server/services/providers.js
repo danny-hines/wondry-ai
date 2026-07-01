@@ -11,7 +11,10 @@ import { mockArtifactHTML, mockReadingLesson } from './mockArtifact.js';
 // prompt/completion_tokens) to { inTok, outTok }.
 export function usageTokens(data) {
   const u = (data && data.usage) || {};
-  return { inTok: u.input_tokens ?? u.prompt_tokens ?? 0, outTok: u.output_tokens ?? u.completion_tokens ?? 0 };
+  return {
+    inTok: u.input_tokens ?? u.prompt_tokens ?? 0,
+    outTok: u.output_tokens ?? u.completion_tokens ?? 0,
+  };
 }
 
 // Record token usage + estimated cost for one API call (prices in config.json),
@@ -22,13 +25,24 @@ function track(provider, task, data) {
     if (!inTok && !outTok) return;
     const price = provider.price || {};
     const cost = (inTok / 1e6) * (price.in || 0) + (outTok / 1e6) * (price.out || 0);
-    recordUsage({ task, model: provider.model, artifactId: currentArtifactId(), inputTokens: inTok, outputTokens: outTok, costUsd: cost });
-  } catch { /* never let accounting break generation */ }
+    recordUsage({
+      task,
+      model: provider.model,
+      artifactId: currentArtifactId(),
+      inputTokens: inTok,
+      outputTokens: outTok,
+      costUsd: cost,
+    });
+  } catch {
+    /* never let accounting break generation */
+  }
 }
 
 // Dispatch a text completion to the right adapter for the provider.
 function complete(provider, opts) {
-  return provider.type === 'openai' ? openaiComplete(provider, opts) : anthropicComplete(provider, opts);
+  return provider.type === 'openai'
+    ? openaiComplete(provider, opts)
+    : anthropicComplete(provider, opts);
 }
 
 // Run a text task. `history` (optional) is prior turns [{role:'user'|'assistant',content}]
@@ -52,10 +66,22 @@ export async function runVision(task, { system, prompt, imageBase64, mediaType =
   ];
   const res = await fetch(`${provider.base_url}/v1/messages`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-api-key': provider._apiKey, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: provider.model, max_tokens: provider.max_tokens || 4096, system: system || undefined, messages: [{ role: 'user', content }] }),
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': provider._apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: provider.model,
+      max_tokens: provider.max_tokens || 4096,
+      system: system || undefined,
+      messages: [{ role: 'user', content }],
+    }),
   });
-  if (!res.ok) { const t = await res.text(); throw new Error(`Anthropic vision ${res.status}: ${t.slice(0, 300)}`); }
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`Anthropic vision ${res.status}: ${t.slice(0, 300)}`);
+  }
   const data = await res.json();
   track(provider, task, data);
   return (data.content || []).map((b) => b.text || '').join('');
@@ -71,7 +97,12 @@ export async function runArtifact({ topic, profile, system, tier }) {
   const userPrompt =
     `Create an interactive educational page for a child named ${profile.name || 'friend'}, age ${profile.age || 7}, ` +
     `reading level "${profile.reading_level || 'early reader'}". Topic: "${topic}".`;
-  const html = await complete(provider, { system: sys, messages: [{ role: 'user', content: userPrompt }], maxTokens: tier?.maxTokens, task: 'artifact' });
+  const html = await complete(provider, {
+    system: sys,
+    messages: [{ role: 'user', content: userPrompt }],
+    maxTokens: tier?.maxTokens,
+    task: 'artifact',
+  });
   const m = html.match(/<title>([^<]+)<\/title>/i);
   return {
     html: stripFence(html),
@@ -89,8 +120,14 @@ export async function runReading({ profile, interests, level = 2, system }) {
   if (provider.type === 'mock') return mockReadingLesson({ profile, interests, level });
   const userPrompt =
     `Write a reading-practice lesson for ${profile.name || 'a child'}, age ${profile.age || 7}, at level ${level} (1=easiest, 5=hardest).` +
-    (interests ? ` The child loves: ${interests}. Theme the story around that.` : ' Pick a fun, wholesome theme.');
-  const raw = await complete(provider, { system, messages: [{ role: 'user', content: userPrompt }], task: 'reading' });
+    (interests
+      ? ` The child loves: ${interests}. Theme the story around that.`
+      : ' Pick a fun, wholesome theme.');
+  const raw = await complete(provider, {
+    system,
+    messages: [{ role: 'user', content: userPrompt }],
+    task: 'reading',
+  });
   return normalizeLesson(extractJSON(raw), { interests, level });
 }
 
@@ -99,7 +136,12 @@ export async function runReading({ profile, interests, level = 2, system }) {
 export async function runStructured(task, { system, prompt, mock, maxTokens }) {
   const provider = resolveProvider(task);
   if (provider.type === 'mock') return mock ? mock() : {};
-  const raw = await complete(provider, { system, messages: [{ role: 'user', content: prompt }], maxTokens, task });
+  const raw = await complete(provider, {
+    system,
+    messages: [{ role: 'user', content: prompt }],
+    maxTokens,
+    task,
+  });
   return extractJSON(raw);
 }
 
@@ -110,23 +152,36 @@ export async function runStructured(task, { system, prompt, mock, maxTokens }) {
 export async function runAgentic(task, { system, prompt, tools = [], mock, maxTurns = 6 }) {
   const provider = resolveProvider(task);
   if (provider.type === 'mock') return mock ? mock() : {};
-  if (provider.type === 'openai') return openaiAgentic(provider, { system, prompt, tools, maxTurns, task });
-  const toolDefs = tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.input_schema }));
+  if (provider.type === 'openai')
+    return openaiAgentic(provider, { system, prompt, tools, maxTurns, task });
+  const toolDefs = tools.map((t) => ({
+    name: t.name,
+    description: t.description,
+    input_schema: t.input_schema,
+  }));
   const byName = Object.fromEntries(tools.map((t) => [t.name, t]));
   const messages = [{ role: 'user', content: prompt }];
   let finalText = '';
   for (let turn = 0; turn < maxTurns; turn++) {
     const data = await anthropicRaw(provider, { system, messages, tools: toolDefs, task });
     const blocks = data.content || [];
-    finalText = blocks.filter((b) => b.type === 'text').map((b) => b.text).join('');
+    finalText = blocks
+      .filter((b) => b.type === 'text')
+      .map((b) => b.text)
+      .join('');
     const toolUses = blocks.filter((b) => b.type === 'tool_use');
     if (data.stop_reason !== 'tool_use' || !toolUses.length) break;
     messages.push({ role: 'assistant', content: blocks });
     const results = [];
     for (const tu of toolUses) {
       let result;
-      try { result = byName[tu.name] ? await byName[tu.name].handler(tu.input || {}) : { error: 'unknown tool' }; }
-      catch (e) { result = { error: String(e.message || e) }; }
+      try {
+        result = byName[tu.name]
+          ? await byName[tu.name].handler(tu.input || {})
+          : { error: 'unknown tool' };
+      } catch (e) {
+        result = { error: String(e.message || e) };
+      }
       results.push({ type: 'tool_result', tool_use_id: tu.id, content: JSON.stringify(result) });
     }
     messages.push({ role: 'user', content: results });
@@ -139,14 +194,23 @@ export async function runAgentic(task, { system, prompt, tools = [], mock, maxTu
 async function anthropicRaw(provider, { system, messages, tools, task }) {
   const res = await fetch(`${provider.base_url}/v1/messages`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-api-key': provider._apiKey, 'anthropic-version': '2023-06-01' },
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': provider._apiKey,
+      'anthropic-version': '2023-06-01',
+    },
     body: JSON.stringify({
-      model: provider.model, max_tokens: provider.max_tokens || 4096,
-      system: system || undefined, messages,
+      model: provider.model,
+      max_tokens: provider.max_tokens || 4096,
+      system: system || undefined,
+      messages,
       tools: tools && tools.length ? tools : undefined,
     }),
   });
-  if (!res.ok) { const t = await res.text(); throw new Error(`Anthropic API ${res.status}: ${t.slice(0, 300)}`); }
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`Anthropic API ${res.status}: ${t.slice(0, 300)}`);
+  }
   const data = await res.json();
   track(provider, task, data);
   return data;
@@ -155,26 +219,42 @@ async function anthropicRaw(provider, { system, messages, tools, task }) {
 // Pull the first JSON object out of a model response (tolerates stray prose/fences).
 function extractJSON(s) {
   const t = stripFence(String(s || '').trim());
-  try { return JSON.parse(t); } catch {}
-  const i = t.indexOf('{'), j = t.lastIndexOf('}');
-  if (i >= 0 && j > i) { try { return JSON.parse(t.slice(i, j + 1)); } catch {} }
+  try {
+    return JSON.parse(t);
+  } catch {}
+  const i = t.indexOf('{'),
+    j = t.lastIndexOf('}');
+  if (i >= 0 && j > i) {
+    try {
+      return JSON.parse(t.slice(i, j + 1));
+    } catch {}
+  }
   throw new Error('Reading lesson was not valid JSON');
 }
 
 // Coerce/clean a generated lesson into the strict shape the Reader expects.
-const oneEmoji = (s, fb) => { const m = String(s || '').match(/\p{Extended_Pictographic}/u); return m ? m[0] : fb; };
+const oneEmoji = (s, fb) => {
+  const m = String(s || '').match(/\p{Extended_Pictographic}/u);
+  return m ? m[0] : fb;
+};
 function normalizeLesson(obj, { interests, level }) {
   const pages = (Array.isArray(obj?.pages) ? obj.pages : [])
     .map((pg) => ({
       illustration: oneEmoji(pg?.illustration, '📖'),
       lines: (Array.isArray(pg?.lines) ? pg.lines : [])
-        .map((l) => String(l || '').replace(/\s+/g, ' ').trim())
+        .map((l) =>
+          String(l || '')
+            .replace(/\s+/g, ' ')
+            .trim(),
+        )
         .filter(Boolean),
     }))
     .filter((pg) => pg.lines.length);
   if (!pages.length) throw new Error('Reading lesson had no readable pages');
   return {
-    title: (obj?.title && String(obj.title).trim().slice(0, 80)) || titleCase(interests || 'A Reading Story'),
+    title:
+      (obj?.title && String(obj.title).trim().slice(0, 80)) ||
+      titleCase(interests || 'A Reading Story'),
     emoji: oneEmoji(obj?.emoji, pickEmoji(interests || 'story')),
     interest: (obj?.interest && String(obj.interest).trim().slice(0, 40)) || interests || 'reading',
     level: Math.max(1, Math.min(5, Number(obj?.level) || level)),
@@ -200,7 +280,11 @@ function normalizeMessages(msgs) {
 async function anthropicComplete(provider, { system, messages, maxTokens, task }) {
   const res = await fetch(`${provider.base_url}/v1/messages`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-api-key': provider._apiKey, 'anthropic-version': '2023-06-01' },
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': provider._apiKey,
+      'anthropic-version': '2023-06-01',
+    },
     body: JSON.stringify({
       model: provider.model,
       max_tokens: maxTokens || provider.max_tokens || 4096,
@@ -208,7 +292,10 @@ async function anthropicComplete(provider, { system, messages, maxTokens, task }
       messages: normalizeMessages(messages),
     }),
   });
-  if (!res.ok) { const t = await res.text(); throw new Error(`Anthropic API ${res.status}: ${t.slice(0, 300)}`); }
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`Anthropic API ${res.status}: ${t.slice(0, 300)}`);
+  }
   const data = await res.json();
   track(provider, task, data);
   return (data.content || []).map((b) => b.text || '').join('');
@@ -226,7 +313,7 @@ export function openaiBody(provider, { system, messages, maxTokens, tools }) {
   return body;
 }
 export function parseOpenaiText(data) {
-  return ((((data.choices || [])[0] || {}).message || {}).content) || '';
+  return (((data.choices || [])[0] || {}).message || {}).content || '';
 }
 async function openaiCall(provider, body) {
   const res = await fetch(`${provider.base_url}/chat/completions`, {
@@ -234,7 +321,10 @@ async function openaiCall(provider, body) {
     headers: { 'content-type': 'application/json', authorization: `Bearer ${provider._apiKey}` },
     body: JSON.stringify(body),
   });
-  if (!res.ok) { const t = await res.text(); throw new Error(`OpenAI API ${res.status}: ${t.slice(0, 300)}`); }
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`OpenAI API ${res.status}: ${t.slice(0, 300)}`);
+  }
   return res.json();
 }
 async function openaiComplete(provider, { system, messages, maxTokens, task }) {
@@ -245,12 +335,21 @@ async function openaiComplete(provider, { system, messages, maxTokens, task }) {
 // OpenAI tool-use loop (mirrors the Anthropic one): function tools, tool_calls,
 // role:'tool' results. Server-side; the model only ever sees tool results.
 async function openaiAgentic(provider, { system, prompt, tools, maxTurns, task }) {
-  const toolDefs = tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.input_schema } }));
+  const toolDefs = tools.map((t) => ({
+    type: 'function',
+    function: { name: t.name, description: t.description, parameters: t.input_schema },
+  }));
   const byName = Object.fromEntries(tools.map((t) => [t.name, t]));
-  const messages = [...(system ? [{ role: 'system', content: system }] : []), { role: 'user', content: prompt }];
+  const messages = [
+    ...(system ? [{ role: 'system', content: system }] : []),
+    { role: 'user', content: prompt },
+  ];
   let finalText = '';
   for (let turn = 0; turn < maxTurns; turn++) {
-    const data = await openaiCall(provider, openaiBody(provider, { messages, tools: toolDefs.length ? toolDefs : undefined }));
+    const data = await openaiCall(
+      provider,
+      openaiBody(provider, { messages, tools: toolDefs.length ? toolDefs : undefined }),
+    );
     track(provider, task, data);
     const msg = ((data.choices || [])[0] || {}).message || {};
     if (msg.content) finalText = msg.content;
@@ -259,15 +358,26 @@ async function openaiAgentic(provider, { system, prompt, tools, maxTurns, task }
     messages.push(msg);
     for (const c of calls) {
       let result;
-      try { const args = JSON.parse((c.function && c.function.arguments) || '{}'); result = byName[c.function.name] ? await byName[c.function.name].handler(args) : { error: 'unknown tool' }; }
-      catch (e) { result = { error: String(e.message || e) }; }
+      try {
+        const args = JSON.parse((c.function && c.function.arguments) || '{}');
+        result = byName[c.function.name]
+          ? await byName[c.function.name].handler(args)
+          : { error: 'unknown tool' };
+      } catch (e) {
+        result = { error: String(e.message || e) };
+      }
       messages.push({ role: 'tool', tool_call_id: c.id, content: JSON.stringify(result) });
     }
   }
   return extractJSON(finalText);
 }
 
-function stripFence(s) { return s.replace(/^```[a-z]*\n/i, '').replace(/\n```\s*$/i, '').trim(); }
+function stripFence(s) {
+  return s
+    .replace(/^```[a-z]*\n/i, '')
+    .replace(/\n```\s*$/i, '')
+    .trim();
+}
 
 // --- Mock text adapter (dev / keyless) ---
 function mockText(task, prompt) {
@@ -275,42 +385,87 @@ function mockText(task, prompt) {
   if (task === 'intent') {
     const buildVerb = /\b(build|make|create|show|draw|give)\b/.test(p);
     const pageNoun = /\b(page|lesson|game|quiz|story|activity|picture|app)\b/.test(p);
-    const explicit = (buildVerb && pageNoun) || /\b(make|build|show|draw) me\b/.test(p) || /\bi (want|wanna) to see\b/.test(p);
+    const explicit =
+      (buildVerb && pageNoun) ||
+      /\b(make|build|show|draw) me\b/.test(p) ||
+      /\bi (want|wanna) to see\b/.test(p);
     return JSON.stringify({ intent: explicit ? 'artifact' : 'chat' });
   }
   if (task === 'plan') {
-    return JSON.stringify({ title: titleCase(extractTopic(prompt)), emoji: pickEmoji(prompt), plan: `Let's explore ${extractTopic(prompt)} together!` });
+    return JSON.stringify({
+      title: titleCase(extractTopic(prompt)),
+      emoji: pickEmoji(prompt),
+      plan: `Let's explore ${extractTopic(prompt)} together!`,
+    });
   }
   if (task === 'resolve') return extractTopic(prompt);
   if (task === 'safety') {
     // Deterministic stand-in for the topic-appropriateness gate: block an obvious
     // blocklist, allow everything else. The real provider uses TOPIC_SAFETY_PROMPT.
-    return /\b(holocaust|genocide|war|weapon|gun|kill|suicide|murder|drug|sex|porn|nazi|terroris)/.test(p) ? 'no' : 'yes';
+    return /\b(holocaust|genocide|war|weapon|gun|kill|suicide|murder|drug|sex|porn|nazi|terroris)/.test(
+      p,
+    )
+      ? 'no'
+      : 'yes';
   }
   if (task === 'summarize') return `Recent interests: ${extractTopic(prompt)}.`;
-  if (/^(hi|hello|hey|yo|sup|howdy|how('?s| is) it going|how are you|good (morning|afternoon|evening))/.test(p))
+  if (
+    /^(hi|hello|hey|yo|sup|howdy|how('?s| is) it going|how are you|good (morning|afternoon|evening))/.test(
+      p,
+    )
+  )
     return "Hi there! I'm so happy to see you. What would you like to explore today?";
-  if (/\b(time|clock|what day|date)\b/.test(p)) return "I don't have a clock, but it's always a great time to learn something fun!";
-  if (/\b(your name|who are you)\b/.test(p)) return "I'm your learning buddy! I love helping you discover cool things.";
+  if (/\b(time|clock|what day|date)\b/.test(p))
+    return "I don't have a clock, but it's always a great time to learn something fun!";
+  if (/\b(your name|who are you)\b/.test(p))
+    return "I'm your learning buddy! I love helping you discover cool things.";
   return `Ooh, ${extractTopic(prompt)} — that's a fun thing to wonder about!`;
 }
 
 export function extractTopic(prompt = '') {
   let t = prompt
     .replace(/^(can you |could you |please |hey |um |uh )/gi, '')
-    .replace(/(build|make|show|teach|tell|create|give)( me)?( a| an| the)? (page|lesson|game|quiz|story|activity|something|artifact)?( about| on| for)?/gi, '')
+    .replace(
+      /(build|make|show|teach|tell|create|give)( me)?( a| an| the)? (page|lesson|game|quiz|story|activity|something|artifact)?( about| on| for)?/gi,
+      '',
+    )
     .replace(/(i (want|wanna|would like) to )?(learn|know|hear|see)( about| more about)?/gi, '')
     .replace(/[?.!]/g, '')
     .trim();
   return t || 'something fun';
 }
 
-const EMOJI = { rock: '🪨', volcano: '🌋', space: '🚀', moon: '🌙', star: '⭐', dino: '🦕', dinosaur: '🦕',
-  ocean: '🌊', fish: '🐟', plant: '🌱', tree: '🌳', count: '🔢', number: '🔢', pig: '🐷', story: '📖',
-  animal: '🐾', weather: '🌦️', water: '💧', body: '🫀', math: '➗', music: '🎵', color: '🎨', glass: '🪟', cloud: '☁️' };
+const EMOJI = {
+  rock: '🪨',
+  volcano: '🌋',
+  space: '🚀',
+  moon: '🌙',
+  star: '⭐',
+  dino: '🦕',
+  dinosaur: '🦕',
+  ocean: '🌊',
+  fish: '🐟',
+  plant: '🌱',
+  tree: '🌳',
+  count: '🔢',
+  number: '🔢',
+  pig: '🐷',
+  story: '📖',
+  animal: '🐾',
+  weather: '🌦️',
+  water: '💧',
+  body: '🫀',
+  math: '➗',
+  music: '🎵',
+  color: '🎨',
+  glass: '🪟',
+  cloud: '☁️',
+};
 export function pickEmoji(s = '') {
   s = s.toLowerCase();
   for (const k of Object.keys(EMOJI)) if (s.includes(k)) return EMOJI[k];
   return '✨';
 }
-export function titleCase(s = '') { return s.replace(/\b\w/g, (c) => c.toUpperCase()).slice(0, 60); }
+export function titleCase(s = '') {
+  return s.replace(/\b\w/g, (c) => c.toUpperCase()).slice(0, 60);
+}

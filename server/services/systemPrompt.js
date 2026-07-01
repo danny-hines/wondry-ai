@@ -25,7 +25,9 @@ export function getChatSystemPrompt(profile) {
   if (profile.reading_level) bits.push(`reading level: ${profile.reading_level}`);
   return bits.length ? `${base}\n\nYou are talking to a child ${bits.join(', ')}.` : base;
 }
-export function getChatSystemPromptRaw() { return getKV('chat_system_prompt', DEFAULT_CHAT_SYSTEM_PROMPT); }
+export function getChatSystemPromptRaw() {
+  return getKV('chat_system_prompt', DEFAULT_CHAT_SYSTEM_PROMPT);
+}
 
 // ---- INTENT classification: routes the utterance to chat / artifact / timer /
 // reminder and extracts params in ONE call. This is classification-and-extraction
@@ -72,7 +74,9 @@ DEVICE INTEGRATION (use these exactly):
 
 STYLE: bright, friendly, rounded, high-contrast, large fonts. Feel like a delightful kids' app, not a document.`;
 
-export function getArtifactSystemPrompt() { return getKV('artifact_system_prompt', DEFAULT_ARTIFACT_SYSTEM_PROMPT); }
+export function getArtifactSystemPrompt() {
+  return getKV('artifact_system_prompt', DEFAULT_ARTIFACT_SYSTEM_PROMPT);
+}
 
 // ---- Resolve a concrete artifact topic from context (pronoun references) ----
 export const RESOLVE_TOPIC_SYSTEM_PROMPT = `From the conversation, the child wants an interactive learning page. Reply with ONLY a short topic phrase (2-5 words) naming what the page should be about — like a page title, never a sentence or a question. Resolve references like "that", "it", or "this" to the actual subject discussed. If the request is vague (e.g. "tell me a story", "make something fun"), pick a fun, wholesome topic yourself (e.g. "a friendly dragon", "a space adventure"). No punctuation, no quotes, no extra words. Example: talking about volcanoes and they say "make a page about that" -> volcanoes`;
@@ -114,7 +118,9 @@ LEVEL controls difficulty precisely:
 - 5 (advanced): 10-16 words, descriptive language and some challenging words.
 Match the requested level exactly.`;
 
-export function getReadingSystemPrompt() { return getKV('reading_system_prompt', DEFAULT_READING_SYSTEM_PROMPT); }
+export function getReadingSystemPrompt() {
+  return getKV('reading_system_prompt', DEFAULT_READING_SYSTEM_PROMPT);
+}
 
 // ---- FLASHCARDS (declarative widget-kit lesson) ----
 // Output is a declarative document the kiosk renders with its widget kit. The
@@ -135,7 +141,9 @@ RULES:
 - Allowed block types ONLY: text, flashcards, quiz, and optionally one image. Do not invent other types.
 - An image block is {"type":"image","query":"a description of a real photo","alt":"short alt text"} — include it only if the prompt says image sources are available, and only for factual subjects.`;
 
-export function getFlashcardsSystemPrompt() { return getKV('flashcards_system_prompt', DEFAULT_FLASHCARDS_SYSTEM_PROMPT); }
+export function getFlashcardsSystemPrompt() {
+  return getKV('flashcards_system_prompt', DEFAULT_FLASHCARDS_SYSTEM_PROMPT);
+}
 
 // ---- MEMORY (native matching game) ----
 export const DEFAULT_MEMORY_SYSTEM_PROMPT = `You pick a fun set of items for a young child's MEMORY MATCHING game on a theme.
@@ -148,7 +156,9 @@ RULES:
 - "label" is the simple name of that item (e.g. "Tiger", "Rocket").
 - Wholesome and age-appropriate. Prefer concrete, picturable things.`;
 
-export function getMemorySystemPrompt() { return getKV('memory_system_prompt', DEFAULT_MEMORY_SYSTEM_PROMPT); }
+export function getMemorySystemPrompt() {
+  return getKV('memory_system_prompt', DEFAULT_MEMORY_SYSTEM_PROMPT);
+}
 
 // ---- EXPLORABLE SCENE (declarative widget-kit lesson centered on a 'scene') ----
 // Output is a declarative document the kiosk renders with its widget kit. The model
@@ -186,4 +196,6 @@ RULES:
 - No markdown, no emoji inside blurb/facts/quiz text, no numerals where a word reads better. Tailor vocabulary to the child's age/reading level. Never scary, violent, or commercial.
 - Allowed block types ONLY: text, scene, quiz. Do not invent other types or fields.`;
 
-export function getExplorableSystemPrompt() { return getKV('explorable_system_prompt', DEFAULT_EXPLORABLE_SYSTEM_PROMPT); }
+export function getExplorableSystemPrompt() {
+  return getKV('explorable_system_prompt', DEFAULT_EXPLORABLE_SYSTEM_PROMPT);
+}

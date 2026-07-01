@@ -8,26 +8,56 @@
 // (those become reminders later).
 
 const NUMBER_WORDS = {
-  a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8,
-  nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15,
-  sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20, thirty: 30,
-  forty: 40, fifty: 50, sixty: 60, ninety: 90, hundred: 100,
+  a: 1,
+  an: 1,
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+  eleven: 11,
+  twelve: 12,
+  thirteen: 13,
+  fourteen: 14,
+  fifteen: 15,
+  sixteen: 16,
+  seventeen: 17,
+  eighteen: 18,
+  nineteen: 19,
+  twenty: 20,
+  thirty: 30,
+  forty: 40,
+  fifty: 50,
+  sixty: 60,
+  ninety: 90,
+  hundred: 100,
 };
 const UNIT_MS = { sec: 1000, second: 1000, min: 60000, minute: 60000, hour: 3600000, hr: 3600000 };
 
-const MIN_MS = 3000;             // floor so "set a timer" with a tiny number isn't instant
-const MAX_MS = 6 * 3600000;      // 6h cap — anything longer is reminder territory
+const MIN_MS = 3000; // floor so "set a timer" with a tiny number isn't instant
+const MAX_MS = 6 * 3600000; // 6h cap — anything longer is reminder territory
 
-const NUMWORD = 'a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|ninety|hundred';
+const NUMWORD =
+  'a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|ninety|hundred';
 const UNIT_RE = 'sec(?:ond)?|min(?:ute)?|hour|hr';
 // A relative-duration phrase: "in 5 minutes", "in half an hour", "for ten minutes".
 // This is what makes something a TIMER ("remind me in 5 minutes") rather than a
 // wall-clock reminder ("remind me at 5"). Used to detect intent and to strip the
 // duration tail out of a label.
-const REL_DURATION = new RegExp(`\\b(?:in|for)\\s+(?:\\d+|${NUMWORD}|half\\s+(?:a|an))\\s*(?:and a half\\s*)?(?:${UNIT_RE})s?\\b`, 'i');
-export function isRelativeDuration(text) { return REL_DURATION.test(text || ''); }
+const REL_DURATION = new RegExp(
+  `\\b(?:in|for)\\s+(?:\\d+|${NUMWORD}|half\\s+(?:a|an))\\s*(?:and a half\\s*)?(?:${UNIT_RE})s?\\b`,
+  'i',
+);
+export function isRelativeDuration(text) {
+  return REL_DURATION.test(text || '');
+}
 
-const wordToNum = (w) => (/^\d+$/.test(w) ? parseInt(w, 10) : NUMBER_WORDS[w] ?? null);
+const wordToNum = (w) => (/^\d+$/.test(w) ? parseInt(w, 10) : (NUMBER_WORDS[w] ?? null));
 
 // "half" handling: "half a minute"/"half an hour" → 0.5 of the unit.
 function parseDuration(text) {
@@ -39,7 +69,9 @@ function parseDuration(text) {
     if (unit) return UNIT_MS[unit] / 2;
   }
   // <number-or-word> [and a half] <unit>
-  const m = t.match(/\b(\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|ninety|hundred)\s*(and a half\s*)?(sec(?:ond)?|min(?:ute)?|hour|hr)s?\b/);
+  const m = t.match(
+    /\b(\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|ninety|hundred)\s*(and a half\s*)?(sec(?:ond)?|min(?:ute)?|hour|hr)s?\b/,
+  );
   if (!m) return null;
   const n = wordToNum(m[1]);
   if (n == null) return null;
@@ -59,8 +91,11 @@ function parseLabel(text) {
   let label = m[1].trim().replace(/[.?!,]+$/, '');
   // Drop a trailing duration that belongs to the timer, not the label
   // ("water the plants in 1 minute" → "water the plants").
-  label = label.replace(REL_DURATION, '').replace(/\s{2,}/g, ' ').trim();
-  if (!label || parseDuration(label) != null) return null;   // the tail was the duration, not a label
+  label = label
+    .replace(REL_DURATION, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  if (!label || parseDuration(label) != null) return null; // the tail was the duration, not a label
   return label;
 }
 
@@ -70,8 +105,10 @@ export function parseTimer(textRaw) {
   const low = text.toLowerCase();
 
   // Cancel: "cancel/stop/clear/delete (my|the) timer", "never mind the timer"
-  if (/\b(cancel|stop|clear|delete|remove|never ?mind)\b.*\btimers?\b/.test(low)
-      || /\btimers?\b.*\b(cancel|stop|clear|off)\b/.test(low)) {
+  if (
+    /\b(cancel|stop|clear|delete|remove|never ?mind)\b.*\btimers?\b/.test(low) ||
+    /\btimers?\b.*\b(cancel|stop|clear|off)\b/.test(low)
+  ) {
     return { action: 'cancel' };
   }
 

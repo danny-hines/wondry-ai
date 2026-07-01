@@ -15,7 +15,10 @@ import { getKV } from '../db.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..', '..');
 // npm sits next to the running node binary (true for NodeSource on the Pi and nvm).
-const NPM = path.join(path.dirname(process.execPath), process.platform === 'win32' ? 'npm.cmd' : 'npm');
+const NPM = path.join(
+  path.dirname(process.execPath),
+  process.platform === 'win32' ? 'npm.cmd' : 'npm',
+);
 
 export const router = express.Router();
 
@@ -27,10 +30,17 @@ function run(cmd, args) {
   return new Promise((resolve) => {
     let out = '';
     let p;
-    try { p = spawn(cmd, args, { cwd: ROOT }); }
-    catch (e) { return resolve({ code: -1, out: String(e) }); }
-    p.stdout?.on('data', (d) => { out += d; });
-    p.stderr?.on('data', (d) => { out += d; });
+    try {
+      p = spawn(cmd, args, { cwd: ROOT });
+    } catch (e) {
+      return resolve({ code: -1, out: String(e) });
+    }
+    p.stdout?.on('data', (d) => {
+      out += d;
+    });
+    p.stderr?.on('data', (d) => {
+      out += d;
+    });
     p.on('error', (e) => resolve({ code: -1, out: out + String(e) }));
     p.on('close', (code) => resolve({ code, out }));
   });
@@ -45,11 +55,13 @@ router.post('/kiosk/verify', (req, res) => {
 
 router.post('/kiosk/update', async (req, res) => {
   if (!okPin(req)) return res.status(401).json({ status: 'bad-pin', error: 'Incorrect PIN.' });
-  if (!isManaged()) return res.status(400).json({ status: 'unmanaged', error: 'Updates run on the device only.' });
+  if (!isManaged())
+    return res.status(400).json({ status: 'unmanaged', error: 'Updates run on the device only.' });
 
   const before = (await git('rev-parse', 'HEAD')).out.trim();
   const pull = await git('pull', '--rebase', '--autostash'); // --autostash keeps local config.json edits
-  if (pull.code !== 0) return res.status(500).json({ status: 'error', error: pull.out.trim().slice(-400) });
+  if (pull.code !== 0)
+    return res.status(500).json({ status: 'error', error: pull.out.trim().slice(-400) });
   const after = (await git('rev-parse', 'HEAD')).out.trim();
   const rev = (await git('rev-parse', '--short', 'HEAD')).out.trim();
   if (before === after) return res.json({ status: 'up-to-date', rev });
@@ -59,9 +71,11 @@ router.post('/kiosk/update', async (req, res) => {
   res.json({ status: 'updating', rev });
   setImmediate(async () => {
     const install = await run(NPM, ['install', '--no-fund', '--no-audit']);
-    if (install.code !== 0) return console.error('[kiosk update] npm install failed:\n' + install.out.slice(-800));
+    if (install.code !== 0)
+      return console.error('[kiosk update] npm install failed:\n' + install.out.slice(-800));
     const build = await run(NPM, ['run', 'build']);
-    if (build.code !== 0) return console.error('[kiosk update] build failed:\n' + build.out.slice(-800));
+    if (build.code !== 0)
+      return console.error('[kiosk update] build failed:\n' + build.out.slice(-800));
     console.log(`[kiosk update] built ${rev} — exiting for systemd restart`);
     process.exit(0);
   });

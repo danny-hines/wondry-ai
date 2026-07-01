@@ -4,9 +4,16 @@
 // safe to generate and easy to validate. Add a widget here + in the client
 // renderer to grow the kit. Image resolution (query -> local media) happens in a
 // later media pass; here we just keep the request shape.
-const str = (v, max = 600) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, max);
+const str = (v, max = 600) =>
+  String(v == null ? '' : v)
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, max);
 const arr = (v) => (Array.isArray(v) ? v : []);
-const num = (v, lo, hi, dflt) => { const n = Number(v); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : dflt; };
+const num = (v, lo, hi, dflt) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : dflt;
+};
 
 // Curated silhouettes the client can draw behind a 'map' scene (the renderer owns
 // the actual SVG; here we just allow the model to request one by name).
@@ -18,26 +25,41 @@ const SCENE_BACKDROPS = ['body', 'plant', 'globe'];
 // script, href, style, or any attribute outside the lists below — so an icon can
 // only ever DRAW, never execute or fetch. This is the security boundary.
 const ICON_SHAPE_GEOM = {
-  path: { req: ['d'] }, circle: { req: ['cx', 'cy', 'r'] }, ellipse: { req: ['cx', 'cy', 'rx', 'ry'] },
-  rect: { req: ['x', 'y', 'width', 'height'], opt: ['rx', 'ry'] }, line: { req: ['x1', 'y1', 'x2', 'y2'] },
-  polygon: { req: ['points'] }, polyline: { req: ['points'] },
+  path: { req: ['d'] },
+  circle: { req: ['cx', 'cy', 'r'] },
+  ellipse: { req: ['cx', 'cy', 'rx', 'ry'] },
+  rect: { req: ['x', 'y', 'width', 'height'], opt: ['rx', 'ry'] },
+  line: { req: ['x1', 'y1', 'x2', 'y2'] },
+  polygon: { req: ['points'] },
+  polyline: { req: ['points'] },
 };
-const ICON_COLOR_RE = /^(#[0-9a-f]{3,8}|none|currentColor|transparent|white|black|red|orange|yellow|gold|green|blue|navy|purple|pink|brown|tan|gray|grey|silver)$/i;
-const ICON_PATH_RE = /^[-0-9.,eE\s mlhvcsqtazMLHVCSQTAZ]+$/;     // path 'd' / points: digits + path commands only
-const iconColor = (v) => { const s = String(v == null ? '' : v).trim(); return ICON_COLOR_RE.test(s) ? s : undefined; };
-const iconCoord = (v) => { const n = Number(v); return Number.isFinite(n) ? Math.max(-100, Math.min(200, Math.round(n * 1000) / 1000)) : undefined; };
+const ICON_COLOR_RE =
+  /^(#[0-9a-f]{3,8}|none|currentColor|transparent|white|black|red|orange|yellow|gold|green|blue|navy|purple|pink|brown|tan|gray|grey|silver)$/i;
+const ICON_PATH_RE = /^[-0-9.,eE\s mlhvcsqtazMLHVCSQTAZ]+$/; // path 'd' / points: digits + path commands only
+const iconColor = (v) => {
+  const s = String(v == null ? '' : v).trim();
+  return ICON_COLOR_RE.test(s) ? s : undefined;
+};
+const iconCoord = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n)
+    ? Math.max(-100, Math.min(200, Math.round(n * 1000) / 1000))
+    : undefined;
+};
 
 function iconGeom(out, a, v, required) {
   if (a === 'd' || a === 'points') {
     const s = String(v == null ? '' : v).trim();
-    if (!s) return !required;                                   // absent optional is fine; absent required isn't
+    if (!s) return !required; // absent optional is fine; absent required isn't
     if (s.length > 1200 || !ICON_PATH_RE.test(s)) return false; // present but unsafe → reject the shape
-    out[a] = s; return true;
+    out[a] = s;
+    return true;
   }
   if (v == null) return !required;
   const n = iconCoord(v);
   if (n == null) return false;
-  out[a] = n; return true;
+  out[a] = n;
+  return true;
 }
 function iconShape(sh) {
   const spec = sh && ICON_SHAPE_GEOM[sh.type];
@@ -45,19 +67,26 @@ function iconShape(sh) {
   const out = { type: sh.type };
   for (const a of spec.req) if (!iconGeom(out, a, sh[a], true)) return null;
   for (const a of spec.opt || []) if (!iconGeom(out, a, sh[a], false)) return null;
-  const fill = iconColor(sh.fill); if (fill) out.fill = fill;
-  const stroke = iconColor(sh.stroke); if (stroke) out.stroke = stroke;
-  const sw = Number(sh.strokeWidth); if (Number.isFinite(sw)) out.strokeWidth = Math.max(0, Math.min(8, sw));
+  const fill = iconColor(sh.fill);
+  if (fill) out.fill = fill;
+  const stroke = iconColor(sh.stroke);
+  if (stroke) out.stroke = stroke;
+  const sw = Number(sh.strokeWidth);
+  if (Number.isFinite(sw)) out.strokeWidth = Math.max(0, Math.min(8, sw));
   if (['round', 'butt', 'square'].includes(sh.strokeLinecap)) out.strokeLinecap = sh.strokeLinecap;
-  if (['round', 'bevel', 'miter'].includes(sh.strokeLinejoin)) out.strokeLinejoin = sh.strokeLinejoin;
-  const op = Number(sh.opacity); if (Number.isFinite(op)) out.opacity = Math.max(0, Math.min(1, op));
+  if (['round', 'bevel', 'miter'].includes(sh.strokeLinejoin))
+    out.strokeLinejoin = sh.strokeLinejoin;
+  const op = Number(sh.opacity);
+  if (Number.isFinite(op)) out.opacity = Math.max(0, Math.min(1, op));
   return out;
 }
 function sceneIcon(raw) {
   if (!raw || typeof raw !== 'object') return undefined;
   const shapes = arr(raw.shapes).slice(0, 16).map(iconShape).filter(Boolean);
   if (!shapes.length) return undefined;
-  const vb = /^[-0-9.]+(\s+[-0-9.]+){3}$/.test(String(raw.viewBox || '').trim()) ? String(raw.viewBox).trim() : '0 0 24 24';
+  const vb = /^[-0-9.]+(\s+[-0-9.]+){3}$/.test(String(raw.viewBox || '').trim())
+    ? String(raw.viewBox).trim()
+    : '0 0 24 24';
   return { viewBox: vb, shapes };
 }
 
@@ -72,27 +101,46 @@ function sceneNode(n) {
     label,
     emoji: oneEmoji(n.emoji) || '•',
     blurb: str(n.blurb, 240),
-    facts: arr(n.facts).map((f) => str(f, 200)).filter(Boolean).slice(0, 4),
+    facts: arr(n.facts)
+      .map((f) => str(f, 200))
+      .filter(Boolean)
+      .slice(0, 4),
   };
-  if (n.x != null || n.y != null) { node.x = num(n.x, 0, 100, 50); node.y = num(n.y, 0, 100, 50); }
+  if (n.x != null || n.y != null) {
+    node.x = num(n.x, 0, 100, 50);
+    node.y = num(n.y, 0, 100, 50);
+  }
   if (n.size != null) node.size = num(n.size, 0.5, 2, 1);
   if (n.color) node.color = str(n.color, 16);
-  const icon = sceneIcon(n.icon); if (icon) node.icon = icon;
+  const icon = sceneIcon(n.icon);
+  if (icon) node.icon = icon;
   return node;
 }
 
 // Each builder coerces one raw block into a clean, known-good block (or null).
 const BLOCKS = {
-  heading: (b) => { const text = str(b.text, 120); return text ? { type: 'heading', text } : null; },
-  text: (b) => { const text = str(b.text, 800); return text ? { type: 'text', text } : null; },
+  heading: (b) => {
+    const text = str(b.text, 120);
+    return text ? { type: 'heading', text } : null;
+  },
+  text: (b) => {
+    const text = str(b.text, 800);
+    return text ? { type: 'text', text } : null;
+  },
   flashcards: (b) => {
     const cards = arr(b.cards)
-      .map((c) => ({ front: str(c.front, 120), back: str(c.back, 300), hint: c.hint ? str(c.hint, 160) : undefined }))
+      .map((c) => ({
+        front: str(c.front, 120),
+        back: str(c.back, 300),
+        hint: c.hint ? str(c.hint, 160) : undefined,
+      }))
       .filter((c) => c.front && c.back);
     return cards.length ? { type: 'flashcards', cards } : null;
   },
   quiz: (b) => {
-    const options = arr(b.options).map((o) => str(o, 160)).filter(Boolean);
+    const options = arr(b.options)
+      .map((o) => str(o, 160))
+      .filter(Boolean);
     const question = str(b.question, 240);
     if (!question || options.length < 2) return null;
     let answer = Number.isInteger(b.answer) ? b.answer : 0;
@@ -121,16 +169,31 @@ const BLOCKS = {
   // Image: either an already-baked mediaId (agentic find_image tool) or a query
   // the post-pass resolves to a cached local mediaId from a trusted source.
   image: (b) => {
-    if (b.mediaId) return { type: 'image', mediaId: str(b.mediaId, 40), alt: str(b.alt, 160), caption: b.caption ? str(b.caption, 160) : undefined, credit: b.credit ? str(b.credit, 180) : undefined };
-    const query = str(b.query, 160); if (!query) return null;
-    return { type: 'image', query, alt: str(b.alt || b.query, 160), caption: b.caption ? str(b.caption, 160) : undefined };
+    if (b.mediaId)
+      return {
+        type: 'image',
+        mediaId: str(b.mediaId, 40),
+        alt: str(b.alt, 160),
+        caption: b.caption ? str(b.caption, 160) : undefined,
+        credit: b.credit ? str(b.credit, 180) : undefined,
+      };
+    const query = str(b.query, 160);
+    if (!query) return null;
+    return {
+      type: 'image',
+      query,
+      alt: str(b.alt || b.query, 160),
+      caption: b.caption ? str(b.caption, 160) : undefined,
+    };
   },
 };
 
 // Coerce a raw model object into a clean declarative doc. Drops unknown/invalid
 // blocks; throws if nothing renderable survives.
 export function normalizeDoc(obj, { title, emoji, subject } = {}) {
-  const blocks = arr(obj && obj.blocks).map((b) => (b && BLOCKS[b.type] ? BLOCKS[b.type](b) : null)).filter(Boolean);
+  const blocks = arr(obj && obj.blocks)
+    .map((b) => (b && BLOCKS[b.type] ? BLOCKS[b.type](b) : null))
+    .filter(Boolean);
   if (!blocks.length) throw new Error('declarative content had no renderable blocks');
   return {
     title: str(obj && obj.title, 80) || title || 'Lesson',
@@ -158,4 +221,7 @@ export function collectText(doc) {
   return out.join(' ');
 }
 
-function oneEmoji(s) { const m = String(s || '').match(/\p{Extended_Pictographic}/u); return m ? m[0] : ''; }
+function oneEmoji(s) {
+  const m = String(s || '').match(/\p{Extended_Pictographic}/u);
+  return m ? m[0] : '';
+}

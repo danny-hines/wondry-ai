@@ -4,13 +4,19 @@
 // goes through the conversation route (which calls the scheduler directly), so this
 // is mostly read + parent control.
 import express from 'express';
-import { startTimer, startReminder, cancelSchedule, listActiveTimers, listActiveSchedules } from '../services/scheduler.js';
+import {
+  startTimer,
+  startReminder,
+  cancelSchedule,
+  listActiveTimers,
+  listActiveSchedules,
+} from '../services/scheduler.js';
 import { formatDuration } from '../services/timerParse.js';
 import { localInputToEpoch, getTimezone } from '../services/timezone.js';
 
 export const router = express.Router();
 
-const MAX_TIMER_MS = 6 * 3600000;   // mirror the parser's cap
+const MAX_TIMER_MS = 6 * 3600000; // mirror the parser's cap
 
 // Kiosk: just the countdown timers (reminders are hours/days out, not shown as chips).
 router.get('/timers', (req, res) => {
@@ -24,8 +30,13 @@ router.get('/schedules', (req, res) => {
 router.post('/timers', (req, res) => {
   const { durationMs, label, createdBy } = req.body || {};
   const ms = Number(durationMs);
-  if (!Number.isFinite(ms) || ms < 1000 || ms > MAX_TIMER_MS) return res.status(400).json({ error: 'durationMs out of range' });
-  const timer = startTimer({ durationMs: ms, label: label || null, createdBy: createdBy === 'parent' ? 'parent' : 'voice' });
+  if (!Number.isFinite(ms) || ms < 1000 || ms > MAX_TIMER_MS)
+    return res.status(400).json({ error: 'durationMs out of range' });
+  const timer = startTimer({
+    durationMs: ms,
+    label: label || null,
+    createdBy: createdBy === 'parent' ? 'parent' : 'voice',
+  });
   res.json({ schedule: timer, pretty: formatDuration(ms) });
 });
 
@@ -35,8 +46,14 @@ router.post('/reminders', (req, res) => {
   const { atLocal, message, label, createdBy } = req.body || {};
   const fireAt = localInputToEpoch(atLocal, getTimezone());
   if (fireAt == null) return res.status(400).json({ error: 'atLocal must be YYYY-MM-DDTHH:mm' });
-  if (fireAt < Date.now() - 60000) return res.status(400).json({ error: 'that time is in the past' });
-  const reminder = startReminder({ fireAt, message: message || null, label: label || null, createdBy: createdBy === 'voice' ? 'voice' : 'parent' });
+  if (fireAt < Date.now() - 60000)
+    return res.status(400).json({ error: 'that time is in the past' });
+  const reminder = startReminder({
+    fireAt,
+    message: message || null,
+    label: label || null,
+    createdBy: createdBy === 'voice' ? 'voice' : 'parent',
+  });
   res.json({ schedule: reminder });
 });
 

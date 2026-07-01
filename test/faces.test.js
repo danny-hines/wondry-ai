@@ -9,7 +9,15 @@ import path from 'node:path';
 import fs from 'node:fs';
 
 process.env.WONDRY_DB = path.join(os.tmpdir(), `wondry-faces-test-${process.pid}.db`);
-for (const f of [process.env.WONDRY_DB, process.env.WONDRY_DB + '-wal', process.env.WONDRY_DB + '-shm']) { try { fs.rmSync(f); } catch {} }
+for (const f of [
+  process.env.WONDRY_DB,
+  process.env.WONDRY_DB + '-wal',
+  process.env.WONDRY_DB + '-shm',
+]) {
+  try {
+    fs.rmSync(f);
+  } catch {}
+}
 
 const db = await import('../server/db.js');
 db.initSchema();
@@ -25,8 +33,10 @@ const noisy = (base, eps = 0.1) => F.normalize(base.map((b) => b + eps * (Math.r
 
 const personA = randUnit();
 const personB = randUnit();
-const profile = (id, name) => db.db.prepare('INSERT INTO profiles (id,name,initials,color,created_at) VALUES (?,?,?,?,?)')
-  .run(id, name, name.slice(0, 2).toUpperCase(), '#3b82f6', db.now());
+const profile = (id, name) =>
+  db.db
+    .prepare('INSERT INTO profiles (id,name,initials,color,created_at) VALUES (?,?,?,?,?)')
+    .run(id, name, name.slice(0, 2).toUpperCase(), '#3b82f6', db.now());
 
 test('vector math: cosine of identical is 1, of distinct high-dim vectors is near 0', () => {
   assert.ok(Math.abs(F.cosine(personA, personA) - 1) < 1e-9);
@@ -34,8 +44,12 @@ test('vector math: cosine of identical is 1, of distinct high-dim vectors is nea
 });
 
 test('banking groups same person together and separates different people', () => {
-  const aIds = Array.from({ length: 8 }, () => F.bankSample({ embedding: noisy(personA), thumb: thumb(), quality: 0.9 }));
-  const bIds = Array.from({ length: 8 }, () => F.bankSample({ embedding: noisy(personB), thumb: thumb(), quality: 0.9 }));
+  const aIds = Array.from({ length: 8 }, () =>
+    F.bankSample({ embedding: noisy(personA), thumb: thumb(), quality: 0.9 }),
+  );
+  const bIds = Array.from({ length: 8 }, () =>
+    F.bankSample({ embedding: noisy(personB), thumb: thumb(), quality: 0.9 }),
+  );
   assert.equal(new Set(aIds).size, 1, 'all of person A landed in one cluster');
   assert.equal(new Set(bIds).size, 1, 'all of person B landed in one cluster');
   assert.notEqual(aIds[0], bIds[0], 'A and B are different clusters');
@@ -45,7 +59,7 @@ test('banking groups same person together and separates different people', () =>
 test('identify matches an enrolled child and rejects unknown faces', () => {
   profile('logan', 'Logan');
   // enroll person A's cluster to Logan
-  const aCluster = F.bankSample({ embedding: noisy(personA) });   // returns A's cluster id
+  const aCluster = F.bankSample({ embedding: noisy(personA) }); // returns A's cluster id
   db.setFaceClusterProfile(aCluster, 'logan', 'assigned');
 
   const m = F.identify(noisy(personA));
@@ -57,19 +71,28 @@ test('identify matches an enrolled child and rejects unknown faces', () => {
 
 test('observe identifies + emits face.recognized, and only banks thumbed faces', async () => {
   let event = null;
-  const onEvt = (e) => { if (e.type === 'face.recognized') event = e; };
+  const onEvt = (e) => {
+    if (e.type === 'face.recognized') event = e;
+  };
   bus.on('event', onEvt);
   const before = db.clusterSampleCount(db.assignedFaceGalleries()[0].clusterId);
 
   const out = F.observe([
-    { embedding: noisy(personA), trackId: 't1' },               // identify-only (no thumb) — not banked
+    { embedding: noisy(personA), trackId: 't1' }, // identify-only (no thumb) — not banked
     { embedding: noisy(personB), trackId: 't2', thumb: thumb() }, // banked, unknown
   ]);
   bus.off('event', onEvt);
 
-  assert.ok(out.identified.some((i) => i.profileId === 'logan'), 'Logan identified in frame');
+  assert.ok(
+    out.identified.some((i) => i.profileId === 'logan'),
+    'Logan identified in frame',
+  );
   assert.equal(out.banked, 1, 'only the thumbnailed face was banked');
-  assert.equal(db.clusterSampleCount(db.assignedFaceGalleries()[0].clusterId), before, 'identify-only A face was not banked');
+  assert.equal(
+    db.clusterSampleCount(db.assignedFaceGalleries()[0].clusterId),
+    before,
+    'identify-only A face was not banked',
+  );
   assert.ok(event && event.profileId === 'logan', 'emitted face.recognized for Logan');
 });
 
@@ -88,7 +111,11 @@ test('sanitizes embeddings and thumbnails from the open endpoint', () => {
   assert.ok(Math.abs(F.cosine(ok, ok) - 1) < 1e-9, 'output is L2-normalized');
 
   assert.equal(F.cleanThumb('data:image/svg+xml;base64,PHN2Zz4='), null, 'SVG thumb rejected');
-  assert.equal(F.cleanThumb('data:image/jpeg;base64,' + 'A'.repeat(70000)), null, 'oversized rejected');
+  assert.equal(
+    F.cleanThumb('data:image/jpeg;base64,' + 'A'.repeat(70000)),
+    null,
+    'oversized rejected',
+  );
   assert.ok(F.cleanThumb('data:image/jpeg;base64,/9j/4AAQ'), 'small jpeg data URI accepted');
 });
 
@@ -99,4 +126,6 @@ test('faces_enabled toggle defaults off', () => {
   db.setKV('faces_enabled', '0');
 });
 
-function thumb() { return 'data:image/jpeg;base64,/9j/4AAQSkZJRg=='; }
+function thumb() {
+  return 'data:image/jpeg;base64,/9j/4AAQSkZJRg==';
+}

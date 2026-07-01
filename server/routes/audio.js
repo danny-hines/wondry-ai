@@ -25,7 +25,7 @@ router.post('/audio', (req, res) => {
   if (Number.isFinite(warmHz)) setKV('warm_hz', String(Math.max(0, warmHz)));
   if (Number.isFinite(warmGain)) setKV('warm_gain', String(Math.max(0, Math.min(1, warmGain))));
   const cfg = audioConfig();
-  emit('audio', cfg);                 // kiosks retune live
+  emit('audio', cfg); // kiosks retune live
   res.json(cfg);
 });
 

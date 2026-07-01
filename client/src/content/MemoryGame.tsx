@@ -6,25 +6,35 @@ import type { MemoryGameContent } from '../lib/types';
 import { getContent, markEngagement, postContentEvent } from '../lib/api';
 import type { ContentRendererProps } from './types';
 
-interface Card { key: string; pair: number; emoji: string; label: string }
+interface Card {
+  key: string;
+  pair: number;
+  emoji: string;
+  label: string;
+}
 
 function shuffle<T>(a: T[]): T[] {
   const r = a.slice();
-  for (let i = r.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [r[i], r[j]] = [r[j], r[i]]; }
+  for (let i = r.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [r[i], r[j]] = [r[j], r[i]];
+  }
   return r;
 }
 function buildCards(pairs: { emoji: string; label: string }[]): Card[] {
-  return shuffle(pairs.flatMap((p, i) => [
-    { key: `${i}a`, pair: i, emoji: p.emoji, label: p.label },
-    { key: `${i}b`, pair: i, emoji: p.emoji, label: p.label },
-  ]));
+  return shuffle(
+    pairs.flatMap((p, i) => [
+      { key: `${i}a`, pair: i, emoji: p.emoji, label: p.label },
+      { key: `${i}b`, pair: i, emoji: p.emoji, label: p.label },
+    ]),
+  );
 }
 
 export default function MemoryGame({ artifactId, profile, speak, setMood }: ContentRendererProps) {
   const [game, setGame] = useState<MemoryGameContent | null>(null);
   const [err, setErr] = useState(false);
   const [cards, setCards] = useState<Card[]>([]);
-  const [flipped, setFlipped] = useState<number[]>([]);     // indices currently face up (max 2)
+  const [flipped, setFlipped] = useState<number[]>([]); // indices currently face up (max 2)
   const [matched, setMatched] = useState<Set<number>>(new Set());
   const [moves, setMoves] = useState(0);
   const [won, setWon] = useState(false);
@@ -35,12 +45,34 @@ export default function MemoryGame({ artifactId, profile, speak, setMood }: Cont
 
   useEffect(() => {
     let live = true;
-    getContent<MemoryGameContent>(artifactId).then((g) => { if (live) { setGame(g); setCards(buildCards(g.pairs)); } }).catch(() => { if (live) setErr(true); });
-    return () => { live = false; };
+    getContent<MemoryGameContent>(artifactId)
+      .then((g) => {
+        if (live) {
+          setGame(g);
+          setCards(buildCards(g.pairs));
+        }
+      })
+      .catch(() => {
+        if (live) setErr(true);
+      });
+    return () => {
+      live = false;
+    };
   }, [artifactId]);
-  useEffect(() => { setMood('idle'); }, [setMood]);
+  useEffect(() => {
+    setMood('idle');
+  }, [setMood]);
 
-  const reset = () => { if (game) { setCards(buildCards(game.pairs)); setFlipped([]); setMatched(new Set()); setMoves(0); setWon(false); finishedRef.current = false; } };
+  const reset = () => {
+    if (game) {
+      setCards(buildCards(game.pairs));
+      setFlipped([]);
+      setMatched(new Set());
+      setMoves(0);
+      setWon(false);
+      finishedRef.current = false;
+    }
+  };
 
   const click = (idx: number) => {
     if (won || flipped.length === 2) return;
@@ -58,11 +90,20 @@ export default function MemoryGame({ artifactId, profile, speak, setMood }: Cont
       say(cards[a].label);
       setTimeout(() => {
         setMatched((m) => {
-          const nm = new Set(m); nm.add(pair);
+          const nm = new Set(m);
+          nm.add(pair);
           if (game && nm.size === game.pairs.length) {
             setWon(true);
             const score = Math.max(0, Math.min(1, game.pairs.length / moveCount));
-            if (pid && !finishedRef.current) { finishedRef.current = true; markEngagement(artifactId, 'finished', pid); postContentEvent(artifactId, pid, { moves: moveCount, pairs: game.pairs.length, score }); }
+            if (pid && !finishedRef.current) {
+              finishedRef.current = true;
+              markEngagement(artifactId, 'finished', pid);
+              postContentEvent(artifactId, pid, {
+                moves: moveCount,
+                pairs: game.pairs.length,
+                score,
+              });
+            }
             say(`You found them all${profile?.name ? ', ' + profile.name : ''}! Amazing memory!`);
           }
           return nm;
@@ -74,21 +115,47 @@ export default function MemoryGame({ artifactId, profile, speak, setMood }: Cont
     }
   };
 
-  if (err) return <div className="mem"><div className="mem-msg">Couldn't load the game. Try again!</div></div>;
-  if (!game) return <div className="mem"><div className="mem-msg">🃏 Shuffling the cards…</div></div>;
+  if (err)
+    return (
+      <div className="mem">
+        <div className="mem-msg">Couldn't load the game. Try again!</div>
+      </div>
+    );
+  if (!game)
+    return (
+      <div className="mem">
+        <div className="mem-msg">🃏 Shuffling the cards…</div>
+      </div>
+    );
 
   return (
     <div className="mem" style={{ ['--user' as any]: profile?.color || '#7c3aed' }}>
       <div className="mem-bar">
-        <span className="mem-title">{game.emoji} {game.title}</span>
-        <span className="mem-stat">{matched.size}/{game.pairs.length} pairs · {moves} moves</span>
+        <span className="mem-title">
+          {game.emoji} {game.title}
+        </span>
+        <span className="mem-stat">
+          {matched.size}/{game.pairs.length} pairs · {moves} moves
+        </span>
       </div>
-      {won && <div className="mem-win">🎉 You won in {moves} moves! <button className="rbtn" onClick={reset}>Play again ↺</button></div>}
+      {won && (
+        <div className="mem-win">
+          🎉 You won in {moves} moves!{' '}
+          <button className="rbtn" onClick={reset}>
+            Play again ↺
+          </button>
+        </div>
+      )}
       <div className="mem-grid">
         {cards.map((c, idx) => {
           const up = flipped.includes(idx) || matched.has(c.pair);
           return (
-            <button key={c.key} className={`mcard${up ? ' up' : ''}${matched.has(c.pair) ? ' matched' : ''}`} onClick={() => click(idx)} aria-label={up ? c.label : 'hidden card'}>
+            <button
+              key={c.key}
+              className={`mcard${up ? ' up' : ''}${matched.has(c.pair) ? ' matched' : ''}`}
+              onClick={() => click(idx)}
+              aria-label={up ? c.label : 'hidden card'}
+            >
               <span className="mcard-inner">{up ? c.emoji : '❓'}</span>
             </button>
           );

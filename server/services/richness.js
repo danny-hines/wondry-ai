@@ -11,7 +11,7 @@ import { db, getKV } from '../db.js';
 export function selectedTierId() {
   const r = getRichness();
   const id = getKV('content_richness', r.default || 'standard');
-  return r.tiers && r.tiers[id] ? id : (r.default || 'standard');
+  return r.tiers && r.tiers[id] ? id : r.default || 'standard';
 }
 
 // Daily cap on full-richness on-demand page generations. 0 / blank = unlimited.
@@ -23,8 +23,10 @@ export function dailyCap() {
 // On-demand (kid-initiated) generations of ANY type since local midnight — so the
 // cap can't be bypassed by asking for diagrams/games instead of pages.
 function onDemandToday() {
-  const start = new Date(); start.setHours(0, 0, 0, 0);
-  return db.prepare("SELECT COUNT(*) AS n FROM artifacts WHERE source='on_demand' AND created_at >= ?")
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  return db
+    .prepare("SELECT COUNT(*) AS n FROM artifacts WHERE source='on_demand' AND created_at >= ?")
     .get(start.getTime()).n;
 }
 
@@ -50,7 +52,10 @@ export function resolveRichness({ source = 'on_demand', override } = {}) {
 
   if (overCap({ source, override })) {
     const to = r.degradeTo && tiers[r.degradeTo] ? r.degradeTo : 'simple';
-    if (tiers[to] && to !== id) { id = to; degraded = true; }
+    if (tiers[to] && to !== id) {
+      id = to;
+      degraded = true;
+    }
   }
 
   const tier = tiers[id] || {};

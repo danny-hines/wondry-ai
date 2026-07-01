@@ -27,7 +27,12 @@ export function useSpeech(avatarRef: RefObject<AvatarEngine | null>) {
   const [speakingId, setSpeakingId] = useState<string | null>(null);
 
   const stopAudio = () => {
-    for (const s of srcsRef.current) { try { s.onended = null; s.stop(); } catch {} }
+    for (const s of srcsRef.current) {
+      try {
+        s.onended = null;
+        s.stop();
+      } catch {}
+    }
     srcsRef.current = [];
     avatarRef.current?.endSpeaking();
   };
@@ -44,79 +49,142 @@ export function useSpeech(avatarRef: RefObject<AvatarEngine | null>) {
   // `voice` overrides the per-profile voice (admin preview). `onProgress(0..1)` reports
   // OVERALL playback across the reply (for the bubble's word reveal / the Reader sweep).
   // `onStart` fires once the first audio is scheduled — the caller hands thinking→speaking.
-  const speak = useCallback(async (rawText: string, profileId?: string, token?: string, voice?: string, onProgress?: (f: number) => void, onStart?: () => void) => {
-    const avatar = avatarRef.current; if (!avatar) { onStart?.(); return; }
-    // Final TTS gate: never speak profanity (chat replies, announcements, replays, a
-    // page's tap-to-hear). Masked before markdown strip.
-    const text = stripMarkdown(maskProfanity(rawText || '')).trim(); if (!text) { onStart?.(); return; }
-    const id = ++genRef.current;
-    stopAudio();
-    setSpeakingId(token ?? null);
-    let started = false;
-    const markStarted = () => { if (!started) { started = true; onStart?.(); } };
-
-    const sentences = splitSentences(text);
-    // Keep a few syntheses in flight ahead of playback (the Pi serializes them, but is
-    // never left idle waiting for the next request), so the next clip is ready in time.
-    const LOOKAHEAD = 3;
-    const fetches: (Promise<ArrayBuffer | null> | undefined)[] = [];
-    const fire = (i: number) => { if (i < sentences.length && !fetches[i]) fetches[i] = ttsArrayBuffer(sentences[i], profileId, voice); };
-    for (let i = 0; i < LOOKAHEAD; i++) fire(i);
-
-    const ctx = audioCtx();   // shared warm context (kept alive to avoid the Pi's first-sound clipping)
-    // One analyser for the whole utterance: every clip feeds it, so the avatar mouth is
-    // driven continuously across sentence boundaries (no lip-sync gap).
-    const analyser = ctx.createAnalyser(); analyser.fftSize = 1024; analyser.connect(ctx.destination);
-    const data = new Uint8Array(analyser.fftSize);
-    let firstStart = 0, endAt = 0, schedulingDone = false, raf = 0;
-    const startLoop = () => {
-      avatar.beginSpeaking();
-      const tick = () => {
-        if (id !== genRef.current) return;          // superseded
-        analyser.getByteTimeDomainData(data);
-        let sum = 0; for (let k = 0; k < data.length; k++) { const v = (data[k] - 128) / 128; sum += v * v; }
-        avatar.setLevel(Math.min(1, Math.sqrt(sum / data.length) * 6));
-        if (onProgress && firstStart && endAt > firstStart) onProgress(Math.min(1, (ctx.currentTime - firstStart) / (endAt - firstStart)));
-        if (!schedulingDone || ctx.currentTime < endAt) raf = requestAnimationFrame(tick);
-        else { avatar.setLevel(0); avatar.endSpeaking(); onProgress?.(1); }
-      };
-      tick();
-    };
-
-    let cursor = 0;   // ctx time at which the next clip should start
-    try {
-      for (let i = 0; i < sentences.length; i++) {
-        fire(i);
-        const ab = await fetches[i];
-        fire(i + LOOKAHEAD);                        // keep the pipeline full
-        if (id !== genRef.current) return;
-        if (!ab) {                                   // synthesis failed / no Piper
-          if (i === 0) { markStarted(); onProgress?.(1); await avatar.speakFallback(text); return; }
-          continue;                                  // skip a mid-stream miss, keep the flow
-        }
-        let audioBuf: AudioBuffer;
-        try { audioBuf = await ctx.decodeAudioData(ab.slice(0)); } catch { continue; }
-        if (id !== genRef.current) return;
-        const src = ctx.createBufferSource(); src.buffer = audioBuf; src.connect(analyser);
-        // Gapless: start exactly when the previous clip ends; if synthesis fell behind,
-        // start as soon as possible instead (a small catch-up gap, not a stall).
-        const startAt = Math.max(ctx.currentTime + 0.02, cursor || 0);
-        src.start(startAt);
-        srcsRef.current.push(src);
-        cursor = startAt + audioBuf.duration;
-        endAt = cursor;
-        if (!firstStart) { firstStart = startAt; markStarted(); startLoop(); }
+  const speak = useCallback(
+    async (
+      rawText: string,
+      profileId?: string,
+      token?: string,
+      voice?: string,
+      onProgress?: (f: number) => void,
+      onStart?: () => void,
+    ) => {
+      const avatar = avatarRef.current;
+      if (!avatar) {
+        onStart?.();
+        return;
       }
-      schedulingDone = true;
-      if (!firstStart) { markStarted(); return; }   // nothing got scheduled at all
-      // Stay pending until playback finishes so speakingId (the speaking bubble) holds.
-      while (id === genRef.current && ctx.currentTime < endAt) await sleep(60);
-    } finally {
-      schedulingDone = true;
-      cancelAnimationFrame(raf);
-      if (id === genRef.current) { setSpeakingId(null); srcsRef.current = []; avatar.endSpeaking(); }
-    }
-  }, [avatarRef]);
+      // Final TTS gate: never speak profanity (chat replies, announcements, replays, a
+      // page's tap-to-hear). Masked before markdown strip.
+      const text = stripMarkdown(maskProfanity(rawText || '')).trim();
+      if (!text) {
+        onStart?.();
+        return;
+      }
+      const id = ++genRef.current;
+      stopAudio();
+      setSpeakingId(token ?? null);
+      let started = false;
+      const markStarted = () => {
+        if (!started) {
+          started = true;
+          onStart?.();
+        }
+      };
+
+      const sentences = splitSentences(text);
+      // Keep a few syntheses in flight ahead of playback (the Pi serializes them, but is
+      // never left idle waiting for the next request), so the next clip is ready in time.
+      const LOOKAHEAD = 3;
+      const fetches: (Promise<ArrayBuffer | null> | undefined)[] = [];
+      const fire = (i: number) => {
+        if (i < sentences.length && !fetches[i])
+          fetches[i] = ttsArrayBuffer(sentences[i], profileId, voice);
+      };
+      for (let i = 0; i < LOOKAHEAD; i++) fire(i);
+
+      const ctx = audioCtx(); // shared warm context (kept alive to avoid the Pi's first-sound clipping)
+      // One analyser for the whole utterance: every clip feeds it, so the avatar mouth is
+      // driven continuously across sentence boundaries (no lip-sync gap).
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 1024;
+      analyser.connect(ctx.destination);
+      const data = new Uint8Array(analyser.fftSize);
+      let firstStart = 0,
+        endAt = 0,
+        schedulingDone = false,
+        raf = 0;
+      const startLoop = () => {
+        avatar.beginSpeaking();
+        const tick = () => {
+          if (id !== genRef.current) return; // superseded
+          analyser.getByteTimeDomainData(data);
+          let sum = 0;
+          for (let k = 0; k < data.length; k++) {
+            const v = (data[k] - 128) / 128;
+            sum += v * v;
+          }
+          avatar.setLevel(Math.min(1, Math.sqrt(sum / data.length) * 6));
+          if (onProgress && firstStart && endAt > firstStart)
+            onProgress(Math.min(1, (ctx.currentTime - firstStart) / (endAt - firstStart)));
+          if (!schedulingDone || ctx.currentTime < endAt) raf = requestAnimationFrame(tick);
+          else {
+            avatar.setLevel(0);
+            avatar.endSpeaking();
+            onProgress?.(1);
+          }
+        };
+        tick();
+      };
+
+      let cursor = 0; // ctx time at which the next clip should start
+      try {
+        for (let i = 0; i < sentences.length; i++) {
+          fire(i);
+          const ab = await fetches[i];
+          fire(i + LOOKAHEAD); // keep the pipeline full
+          if (id !== genRef.current) return;
+          if (!ab) {
+            // synthesis failed / no Piper
+            if (i === 0) {
+              markStarted();
+              onProgress?.(1);
+              await avatar.speakFallback(text);
+              return;
+            }
+            continue; // skip a mid-stream miss, keep the flow
+          }
+          let audioBuf: AudioBuffer;
+          try {
+            audioBuf = await ctx.decodeAudioData(ab.slice(0));
+          } catch {
+            continue;
+          }
+          if (id !== genRef.current) return;
+          const src = ctx.createBufferSource();
+          src.buffer = audioBuf;
+          src.connect(analyser);
+          // Gapless: start exactly when the previous clip ends; if synthesis fell behind,
+          // start as soon as possible instead (a small catch-up gap, not a stall).
+          const startAt = Math.max(ctx.currentTime + 0.02, cursor || 0);
+          src.start(startAt);
+          srcsRef.current.push(src);
+          cursor = startAt + audioBuf.duration;
+          endAt = cursor;
+          if (!firstStart) {
+            firstStart = startAt;
+            markStarted();
+            startLoop();
+          }
+        }
+        schedulingDone = true;
+        if (!firstStart) {
+          markStarted();
+          return;
+        } // nothing got scheduled at all
+        // Stay pending until playback finishes so speakingId (the speaking bubble) holds.
+        while (id === genRef.current && ctx.currentTime < endAt) await sleep(60);
+      } finally {
+        schedulingDone = true;
+        cancelAnimationFrame(raf);
+        if (id === genRef.current) {
+          setSpeakingId(null);
+          srcsRef.current = [];
+          avatar.endSpeaking();
+        }
+      }
+    },
+    [avatarRef],
+  );
 
   return { speak, speakingId, stop };
 }

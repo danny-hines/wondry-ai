@@ -27,21 +27,38 @@ export function registerType(t) {
   if (!t || !t.id) throw new Error('content type needs an id');
   types.set(t.id, t);
 }
-export function getType(id) { return types.get(id); }
-export function allTypes() { return [...types.values()]; }
+export function getType(id) {
+  return types.get(id);
+}
+export function allTypes() {
+  return [...types.values()];
+}
 
 // Admin enable/disable, persisted in config_kv. Defaults to enabled.
-export function isTypeEnabled(id) { return getKV(`type_enabled_${id}`, '1') !== '0'; }
-export function setTypeEnabled(id, on) { setKV(`type_enabled_${id}`, on ? '1' : '0'); }
-export function enabledTypes() { return allTypes().filter((t) => isTypeEnabled(t.id)); }
+export function isTypeEnabled(id) {
+  return getKV(`type_enabled_${id}`, '1') !== '0';
+}
+export function setTypeEnabled(id, on) {
+  setKV(`type_enabled_${id}`, on ? '1' : '0');
+}
+export function enabledTypes() {
+  return allTypes().filter((t) => isTypeEnabled(t.id));
+}
 
 // Client-facing manifest (no server functions) for the admin console & create forms.
 export function manifest(t) {
   return {
-    id: t.id, label: t.label, emoji: t.emoji, renderer: t.renderer,
-    uses: t.uses || {}, createForm: t.createForm || [],
-    triggersHelp: t.triggersHelp || null, authorable: t.authorable !== false,
+    id: t.id,
+    label: t.label,
+    emoji: t.emoji,
+    renderer: t.renderer,
+    uses: t.uses || {},
+    createForm: t.createForm || [],
+    triggersHelp: t.triggersHelp || null,
+    authorable: t.authorable !== false,
     enabled: isTypeEnabled(t.id),
   };
 }
-export function manifests() { return allTypes().map(manifest); }
+export function manifests() {
+  return allTypes().map(manifest);
+}

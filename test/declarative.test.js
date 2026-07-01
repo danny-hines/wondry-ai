@@ -6,31 +6,70 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeDoc, collectText } from '../server/content/declarative.js';
 
-const scene = (nodes) => normalizeDoc({ title: 'T', emoji: '🧩', blocks: [{ type: 'scene', layout: 'map', nodes }] });
+const scene = (nodes) =>
+  normalizeDoc({ title: 'T', emoji: '🧩', blocks: [{ type: 'scene', layout: 'map', nodes }] });
 const iconOf = (doc) => doc.blocks.find((b) => b.type === 'scene').nodes[0].icon;
 
 test('a clean structured icon passes through with only whitelisted fields', () => {
   const doc = scene([
-    { label: 'Heart', emoji: '🫀', icon: { viewBox: '0 0 24 24', shapes: [
-      { type: 'path', d: 'M12 21 C8 17 4 13 4 9 Z', fill: 'currentColor', stroke: 'red', strokeWidth: 2, strokeLinecap: 'round' },
-      { type: 'circle', cx: 12, cy: 8, r: 3, fill: '#ff0000' },
-    ] } },
+    {
+      label: 'Heart',
+      emoji: '🫀',
+      icon: {
+        viewBox: '0 0 24 24',
+        shapes: [
+          {
+            type: 'path',
+            d: 'M12 21 C8 17 4 13 4 9 Z',
+            fill: 'currentColor',
+            stroke: 'red',
+            strokeWidth: 2,
+            strokeLinecap: 'round',
+          },
+          { type: 'circle', cx: 12, cy: 8, r: 3, fill: '#ff0000' },
+        ],
+      },
+    },
     { label: 'Bone', emoji: '🦴' },
   ]);
   const icon = iconOf(doc);
   assert.equal(icon.viewBox, '0 0 24 24');
   assert.equal(icon.shapes.length, 2);
-  assert.deepEqual(icon.shapes[0], { type: 'path', d: 'M12 21 C8 17 4 13 4 9 Z', fill: 'currentColor', stroke: 'red', strokeWidth: 2, strokeLinecap: 'round' });
+  assert.deepEqual(icon.shapes[0], {
+    type: 'path',
+    d: 'M12 21 C8 17 4 13 4 9 Z',
+    fill: 'currentColor',
+    stroke: 'red',
+    strokeWidth: 2,
+    strokeLinecap: 'round',
+  });
   assert.deepEqual(icon.shapes[1], { type: 'circle', cx: 12, cy: 8, r: 3, fill: '#ff0000' });
 });
 
 test('unknown shape types and unsafe attributes are stripped', () => {
   const doc = scene([
-    { label: 'X', emoji: '⭐', icon: { viewBox: '0 0 24 24', shapes: [
-      { type: 'script', d: 'alert(1)' },                                   // not a real shape → dropped
-      { type: 'image', href: 'http://evil/x.png' },                        // not whitelisted → dropped
-      { type: 'rect', x: 2, y: 2, width: 20, height: 20, onclick: 'steal()', href: 'javascript:1', style: 'x', fill: 'url(http://evil)' },
-    ] } },
+    {
+      label: 'X',
+      emoji: '⭐',
+      icon: {
+        viewBox: '0 0 24 24',
+        shapes: [
+          { type: 'script', d: 'alert(1)' }, // not a real shape → dropped
+          { type: 'image', href: 'http://evil/x.png' }, // not whitelisted → dropped
+          {
+            type: 'rect',
+            x: 2,
+            y: 2,
+            width: 20,
+            height: 20,
+            onclick: 'steal()',
+            href: 'javascript:1',
+            style: 'x',
+            fill: 'url(http://evil)',
+          },
+        ],
+      },
+    },
     { label: 'Y', emoji: '🌟' },
   ]);
   const icon = iconOf(doc);
@@ -48,10 +87,17 @@ test('unknown shape types and unsafe attributes are stripped', () => {
 
 test('a path with non-geometry characters is rejected entirely', () => {
   const doc = scene([
-    { label: 'X', emoji: '⭐', icon: { viewBox: '0 0 24 24', shapes: [
-      { type: 'path', d: 'M0 0 L10 10"></svg><script>alert(1)</script>' },  // injection attempt
-      { type: 'line', x1: 0, y1: 0, x2: 10, y2: 10, stroke: 'currentColor' },
-    ] } },
+    {
+      label: 'X',
+      emoji: '⭐',
+      icon: {
+        viewBox: '0 0 24 24',
+        shapes: [
+          { type: 'path', d: 'M0 0 L10 10"></svg><script>alert(1)</script>' }, // injection attempt
+          { type: 'line', x1: 0, y1: 0, x2: 10, y2: 10, stroke: 'currentColor' },
+        ],
+      },
+    },
     { label: 'Y', emoji: '🌟' },
   ]);
   const icon = iconOf(doc);
@@ -62,7 +108,11 @@ test('a path with non-geometry characters is rejected entirely', () => {
 test('an icon with no valid shapes is omitted, and bad viewBox falls back', () => {
   const doc = scene([
     { label: 'A', emoji: '⭐', icon: { viewBox: 'evil', shapes: [{ type: 'nope' }] } },
-    { label: 'B', emoji: '🌟', icon: { viewBox: '0 0 32 32', shapes: [{ type: 'circle', cx: 16, cy: 16, r: 8 }] } },
+    {
+      label: 'B',
+      emoji: '🌟',
+      icon: { viewBox: '0 0 32 32', shapes: [{ type: 'circle', cx: 16, cy: 16, r: 8 }] },
+    },
   ]);
   const nodes = doc.blocks.find((b) => b.type === 'scene').nodes;
   assert.equal(nodes[0].icon, undefined, 'no surviving shapes → no icon');
@@ -71,7 +121,13 @@ test('an icon with no valid shapes is omitted, and bad viewBox falls back', () =
 
 test('collectText ignores icons (no text to scan there)', () => {
   const doc = scene([
-    { label: 'Heart', emoji: '🫀', blurb: 'beats', facts: ['fact one'], icon: { viewBox: '0 0 24 24', shapes: [{ type: 'circle', cx: 1, cy: 1, r: 1 }] } },
+    {
+      label: 'Heart',
+      emoji: '🫀',
+      blurb: 'beats',
+      facts: ['fact one'],
+      icon: { viewBox: '0 0 24 24', shapes: [{ type: 'circle', cx: 1, cy: 1, r: 1 }] },
+    },
     { label: 'Bone', emoji: '🦴', blurb: 'strong' },
   ]);
   const text = collectText(doc);

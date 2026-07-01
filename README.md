@@ -19,7 +19,7 @@ npm start
 ```
 
 - **Kiosk:** http://localhost:8080/
-- **Parent console:** http://localhost:8080/admin/  (password: `wondry`)
+- **Parent console:** http://localhost:8080/admin/ (password: `wondry`)
 
 > Requires **Node 22.5+** (uses the built-in `node:sqlite` — no native build step). The scripts
 > pass `--experimental-sqlite`; the one experimental warning is expected.
@@ -28,6 +28,7 @@ npm start
 > Node server only picks up code changes on restart.
 
 ### Try this flow
+
 1. On the kiosk, type **"teach me about volcanoes"** (or tap 🎤 to speak in Chrome).
 2. The avatar replies and a **progress card** appears in the chat; it fills as it generates.
 3. When ready it announces, a **toast** appears, and the **app-tray badge** (bottom-right) bumps.
@@ -87,7 +88,7 @@ suits the dot-matrix avatar, so it's a good low-latency option. It needs the `es
 `wondry restart`). If `espeak-ng` is absent (e.g. a dev laptop) `/api/tts` returns `204` and the kiosk
 falls back to the browser's built-in `SpeechSynthesis` instead — which works on macOS/Windows but is
 unreliable in Linux Chromium, hence the server-side espeak path on the Pi. (The saved voice id stays
-`browser` for back-compat.) For a faster *Piper* voice instead, `setup-piper` also pulls
+`browser` for back-compat.) For a faster _Piper_ voice instead, `setup-piper` also pulls
 `en_US-lessac-low` (same speaker as the default, smaller/snappier model).
 
 **Making it sound less robotic:** Piper's `-high` voices are far more natural than `-medium`
@@ -123,32 +124,32 @@ How rich the **interactive pages** are is a parent-set tier, not a code constant
 **emphasis** that steers the output — from lightweight cards up to immersive, animated, simulation-style
 pages (e.g. the solar system as orbiting, tappable planets rather than a list):
 
-| Tier | Model | Tokens | Feel |
-|---|---|---|---|
-| Simple | Haiku | 2k | Quick, cheap, focused — youngest kids |
-| Standard *(default)* | Sonnet | 8k | Real illustrations + interactions — recommended |
-| Rich | Opus | 16k | Immersive simulations/animation — best visuals, priciest |
+| Tier                 | Model  | Tokens | Feel                                                     |
+| -------------------- | ------ | ------ | -------------------------------------------------------- |
+| Simple               | Haiku  | 2k     | Quick, cheap, focused — youngest kids                    |
+| Standard _(default)_ | Sonnet | 8k     | Real illustrations + interactions — recommended          |
+| Rich                 | Opus   | 16k    | Immersive simulations/animation — best visuals, priciest |
 
 Pick the default in **Settings**; parents can override it per page from the **Create** form. A
-**daily cap** limits how many full-richness pages a *child* can request before on-demand pages fall
+**daily cap** limits how many full-richness pages a _child_ can request before on-demand pages fall
 back to the simplest tier for the rest of the day (parent-authored pages are never capped). All tiers
-stay pinned to Claude, preserving the safety model. *(TODO: an estimated-cost dashboard — daily/weekly/
-monthly/lifetime — in the console.)*
+stay pinned to Claude, preserving the safety model. _(TODO: an estimated-cost dashboard — daily/weekly/
+monthly/lifetime — in the console.)_
 
 ### Explorable diagrams (the `explorable` content type)
 
-The richest *reusable* visual isn't freeform HTML — it's a vetted **widget**. The `scene` block in the
+The richest _reusable_ visual isn't freeform HTML — it's a vetted **widget**. The `scene` block in the
 declarative kit renders an **explorable diagram**: a spatial set of focusable things a child taps to
 zoom in on and hear about, with the avatar narrating. The model emits only **data** (a layout + nodes
 with an emoji, a spoken blurb, and tap-to-hear facts); a trusted React renderer does all the motion.
 Three layouts cover a huge range:
 
-- **orbit** — nodes revolve around a center: *the solar system* (sun + planets you tap to focus on),
+- **orbit** — nodes revolve around a center: _the solar system_ (sun + planets you tap to focus on),
   a planet and its moons, an atom.
-- **map** — nodes pinned at x/y: *the human body*, parts of a plant, a place or diagram. A
+- **map** — nodes pinned at x/y: _the human body_, parts of a plant, a place or diagram. A
   curated silhouette **backdrop** (`body` / `plant` / `globe`) can be drawn behind them so the
   scene reads as a real figure; without one, positions auto-fit to fill the stage.
-- **cycle** — a loop/sequence: *the water cycle*, a life cycle, the seasons, a food chain.
+- **cycle** — a loop/sequence: _the water cycle_, a life cycle, the seasons, a food chain.
 
 A child saying **“show me a diagram of the solar system”** (or **“explore the human body”**) routes here
 automatically; parents can also author one under **Create → Explorable diagram**. Because it's pure data
@@ -160,22 +161,22 @@ ends up with lungs). So a node can carry an **`icon`** — a small **vector draw
 from whitelisted shape primitives** (`path`/`circle`/`rect`/`line`/…), which the renderer maps to real
 SVG. It's still pure data, never raw markup: geometry is range-clamped, path/points are charset-checked,
 colors are whitelisted, and anything else (script, `href`, `style`, `url()`, event handlers) is stripped
-server-side — so an icon can only ever *draw*, never execute or fetch (see `test/declarative.test.js`).
+server-side — so an icon can only ever _draw_, never execute or fetch (see `test/declarative.test.js`).
 Live result: a skeleton renders ribs as actual rib lines and the spine as stacked vertebrae instead of 🫁/🐍.
 
 ## What's real vs. mocked
 
-| Subsystem | This MVP (PC) | On the Pi |
-|---|---|---|
-| Avatar (block-grid, amplitude lip-sync) | ✅ real | same |
-| Conversation, intent routing, safety checks | ✅ real | same |
-| Artifact generation + CSP sandbox + persistence | ✅ real | same |
-| App tray, per-child publishing, engagement | ✅ real | same |
-| Parent console (log, authoring, profiles, prompt) | ✅ real | same |
-| **TTS** (text→speech) | ✅ Piper (or browser fallback) | Piper |
-| **STT** (speech→text) | browser Web Speech | ✅ whisper.cpp adapter (browser fallback) |
-| **Presence** (greet on approach) | manual `POST /api/presence` | ✅ Hailo sidecar → `/api/presence` → WS greet |
-| **LLM** | mock (or Claude with a key) | small model on Pi CPU + Claude |
+| Subsystem                                         | This MVP (PC)                  | On the Pi                                     |
+| ------------------------------------------------- | ------------------------------ | --------------------------------------------- |
+| Avatar (block-grid, amplitude lip-sync)           | ✅ real                        | same                                          |
+| Conversation, intent routing, safety checks       | ✅ real                        | same                                          |
+| Artifact generation + CSP sandbox + persistence   | ✅ real                        | same                                          |
+| App tray, per-child publishing, engagement        | ✅ real                        | same                                          |
+| Parent console (log, authoring, profiles, prompt) | ✅ real                        | same                                          |
+| **TTS** (text→speech)                             | ✅ Piper (or browser fallback) | Piper                                         |
+| **STT** (speech→text)                             | browser Web Speech             | ✅ whisper.cpp adapter (browser fallback)     |
+| **Presence** (greet on approach)                  | manual `POST /api/presence`    | ✅ Hailo sidecar → `/api/presence` → WS greet |
+| **LLM**                                           | mock (or Claude with a key)    | small model on Pi CPU + Claude                |
 
 STT and presence now have real adapters (`server/services/stt.js`, `server/services/presence.js`) that
 activate from config/env on the Pi and fall back cleanly on a PC — see **Deploy on the Raspberry Pi** below.
@@ -211,6 +212,7 @@ tools/
 ```
 
 ### Safety model (defense in depth)
+
 1. **CSP sandbox** is the hard boundary — artifacts are served same-origin under a strict CSP and
    rendered in a `sandbox="allow-scripts"` iframe, so a generated page physically can't reach the net.
 2. Kid-facing generation is **pinned to Claude** in `config.json` routing.
@@ -262,7 +264,7 @@ boots. What the installer wires up (and how to do it by hand):
   embeddings (`test/faces.test.js`); the sidecar is the only part that needs the Pi + camera.
   - **Try it without the Pi (two dev testers):** with the app running, `node tools/faces-sim.mjs seed`
     invents a few synthetic people so you can watch the **Familiar faces** tab fill up, assign clusters to
-    kids, then `node tools/faces-sim.mjs walk Ada` to make the kiosk switch. To use your *real* face on a
+    kids, then `node tools/faces-sim.mjs walk Ada` to make the kiosk switch. To use your _real_ face on a
     dev machine, open **`/faces-cam.html`** (e.g. `http://localhost:5173/faces-cam.html`): it runs face
     detection + embeddings in the browser (face-api.js) off your webcam and POSTs to the same endpoint —
     a non-Hailo stand-in for the sidecar (its 128-d embeddings differ from ArcFace, so tune `faces`
@@ -292,6 +294,7 @@ Update when running as the installed service (detected via systemd's `INVOCATION
 `npm start` shows Reload only. The PIN is low-stakes by design — it just keeps kids out of the menu.
 
 ## Known gaps / next steps (deferred by design)
+
 - Hardware adapters above need validation on real Pi hardware (built + unit-tested, but not run on a Pi).
 - Proactive nightly generation + interest model (reuses the authoring→review→publish pipeline).
 - Content sequencing / reading plans (schema keeps stable artifact IDs so it bolts on later).
@@ -308,7 +311,7 @@ Speech is tuned to start fast and avoid dead air:
   `PIPER_HTTP_PORT` to change the managed port. Falls back to spawn-per-call, then browser speech.
 - **Gapless sentence pipeline.** The kiosk splits a reply into sentences, keeps a few syntheses in
   flight ahead of playback, and as each clip decodes schedules it on the Web Audio timeline to start
-  the instant the previous one ends — so first audio is fast (sentence 1 alone) *and* there's no
+  the instant the previous one ends — so first audio is fast (sentence 1 alone) _and_ there's no
   decode/scheduling gap between sentences. Each Piper clip keeps its own trailing silence, so the
   pacing stays natural.
 - **Instant "thinking" filler.** The moment a child submits, the avatar says a short cached line
@@ -317,6 +320,7 @@ Speech is tuned to start fast and avoid dead air:
 
 **Pi synthesis-speed levers** (in `config.json` → `tts`, restart after editing) — if raw Piper synthesis
 is the bottleneck on the Pi rather than the gaps:
+
 - `defaultVoice` — a `-medium` voice (e.g. `en_US-amy-medium`) synthesizes ~2–3× faster than `-high`,
   and `en_US-lessac-low` is the fastest (all installed by `setup-piper`; a per-kid voice overrides it).
 - `synthesis.length_scale` — below `1.0` speaks faster (shorter clips), above is calmer.
@@ -338,7 +342,7 @@ so fp16 is ~2.4× faster (measured ~2.9s vs ~7.1s for a ~2.5s clip → ~1.17× r
 The sidecar **warms the onnx graph at startup** so the first response isn't slow. Still, Kokoro is heavier
 than Piper, so pair it with a fast Piper voice for kids where speed matters more than naturalness.
 
-If speech still feels slow to *start*, the remaining gap is usually Claude generating the reply text
+If speech still feels slow to _start_, the remaining gap is usually Claude generating the reply text
 (`chat` routing) — that's independent of TTS.
 
 ## Frontend (React + TypeScript) — current architecture
@@ -359,19 +363,23 @@ client/
 ```
 
 ### Dev (hot reload)
+
 ```bash
 npm install            # server deps
 npm run build          # installs client deps + builds (first time / for prod)
 npm run dev            # Express (:8080) + Vite (:5173, HMR) together
 ```
+
 Open the app at the **Vite URL (http://localhost:5173)** during development — it proxies `/api`
 and `/ws` to Express, so edits hot-reload while talking to the real backend.
 
 ### Production
+
 ```bash
 npm run build          # -> client/dist
 npm start              # Express serves client/dist (with SPA history fallback) on :8080
 ```
+
 `npm start` serves the built app at `/` (kiosk) and `/admin` (console). If no build exists, the
 root page tells you to build or run dev. The Node backend is unchanged; `npm test` still covers it.
 

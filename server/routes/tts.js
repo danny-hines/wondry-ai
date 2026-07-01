@@ -3,7 +3,14 @@
 // GET /api/voices -> installed voice list (for the admin per-kid dropdown).
 import express from 'express';
 import { db } from '../db.js';
-import { synthesize, ttsAvailable, listVoices, BROWSER_VOICE, espeakAvailable, synthViaEspeak } from '../services/tts.js';
+import {
+  synthesize,
+  ttsAvailable,
+  listVoices,
+  BROWSER_VOICE,
+  espeakAvailable,
+  synthViaEspeak,
+} from '../services/tts.js';
 
 export const router = express.Router();
 
@@ -30,7 +37,9 @@ router.post('/tts', async (req, res) => {
         res.setHeader('Content-Type', 'audio/wav');
         res.setHeader('Cache-Control', 'no-store');
         return res.send(wav);
-      } catch { /* fall through to the browser fallback below */ }
+      } catch {
+        /* fall through to the browser fallback below */
+      }
     }
     res.setHeader('X-TTS-Mode', 'browser');
     return res.status(204).end();

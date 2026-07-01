@@ -6,11 +6,15 @@
   "license": "MIT",
   "type": "module",
   "main": "server/index.js",
-  "bin": { "wondry": "tools/wondry.mjs" },
+  "bin": {
+    "wondry": "tools/wondry.mjs"
+  },
   "scripts": {
     "start": "node --experimental-sqlite server/index.js",
     "seed": "node --experimental-sqlite server/seed.js",
     "test": "node --experimental-sqlite --test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "verify": "bash tools/verify.sh",
     "setup-piper": "node tools/setup-piper.mjs",
     "setup-kokoro": "node tools/setup-kokoro.mjs",
@@ -26,6 +30,7 @@
     "ws": "^8.18.0"
   },
   "devDependencies": {
-    "concurrently": "^9.0.1"
+    "concurrently": "^9.0.1",
+    "prettier": "^3.9.4"
   }
 }

@@ -14,7 +14,11 @@ const KDIR = path.join(ROOT, 'kokoro');
 fs.mkdirSync(KDIR, { recursive: true });
 
 const VENV = path.join(ROOT, '.venv-kokoro');
-const venvPython = path.join(VENV, process.platform === 'win32' ? 'Scripts' : 'bin', process.platform === 'win32' ? 'python.exe' : 'python');
+const venvPython = path.join(
+  VENV,
+  process.platform === 'win32' ? 'Scripts' : 'bin',
+  process.platform === 'win32' ? 'python.exe' : 'python',
+);
 const PORT = process.env.KOKORO_PORT || '8880';
 const KOKORO_URL = `http://127.0.0.1:${PORT}/v1/audio/speech`;
 
@@ -25,7 +29,9 @@ const FILES = ['kokoro-v1.0.fp16.onnx', 'voices-v1.0.bin'];
 
 const log = (...a) => console.log(...a);
 function findPython() {
-  for (const py of (process.platform === 'win32' ? ['python', 'py', 'python3'] : ['python3', 'python'])) {
+  for (const py of process.platform === 'win32'
+    ? ['python', 'py', 'python3']
+    : ['python3', 'python']) {
     if (spawnSync(py, ['--version'], { encoding: 'utf8' }).status === 0) return py;
   }
   return null;
@@ -34,14 +40,21 @@ const run = (cmd, args) => spawnSync(cmd, args, { stdio: 'inherit' }).status ===
 
 async function download(name) {
   const dest = path.join(KDIR, name);
-  if (fs.existsSync(dest) && fs.statSync(dest).size > 0) { log(`  • ${name} (present)`); return true; }
+  if (fs.existsSync(dest) && fs.statSync(dest).size > 0) {
+    log(`  • ${name} (present)`);
+    return true;
+  }
   process.stdout.write(`  • ${name} … `);
   try {
     const res = await fetch(`${REL}/${name}`, { redirect: 'follow' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     fs.writeFileSync(dest, Buffer.from(await res.arrayBuffer()));
-    log('ok'); return true;
-  } catch (e) { log(`✗ ${e.message}`); return false; }
+    log('ok');
+    return true;
+  } catch (e) {
+    log(`✗ ${e.message}`);
+    return false;
+  }
 }
 
 (async () => {
@@ -53,12 +66,22 @@ async function download(name) {
   } else {
     if (!fs.existsSync(venvPython)) {
       log(`→ Creating venv at ${VENV} …`);
-      if (!run(py, ['-m', 'venv', VENV])) log('✗ venv failed. On Debian/Pi: sudo apt-get install -y python3-venv, then re-run.');
+      if (!run(py, ['-m', 'venv', VENV]))
+        log('✗ venv failed. On Debian/Pi: sudo apt-get install -y python3-venv, then re-run.');
     }
     if (fs.existsSync(venvPython)) {
-      log('→ Installing kokoro-onnx + onnxruntime into the venv (this can take a few minutes on a Pi) …');
+      log(
+        '→ Installing kokoro-onnx + onnxruntime into the venv (this can take a few minutes on a Pi) …',
+      );
       run(venvPython, ['-m', 'pip', 'install', '--upgrade', 'pip']);
-      engineOk = run(venvPython, ['-m', 'pip', 'install', '--upgrade', 'kokoro-onnx', 'onnxruntime']);
+      engineOk = run(venvPython, [
+        '-m',
+        'pip',
+        'install',
+        '--upgrade',
+        'kokoro-onnx',
+        'onnxruntime',
+      ]);
     }
   }
 
@@ -71,24 +94,38 @@ async function download(name) {
   const envPath = path.join(ROOT, '.env');
   try {
     const cur = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : '';
-    if (!/^KOKORO_URL=/m.test(cur)) { fs.appendFileSync(envPath, `${cur.endsWith('\n') || !cur ? '' : '\n'}KOKORO_URL=${KOKORO_URL}\n`); log(`\n✓ Added KOKORO_URL to .env`); }
-    else log(`\n• KOKORO_URL already in .env`);
-  } catch { log('\n! Could not edit .env — add this line yourself: KOKORO_URL=' + KOKORO_URL); }
+    if (!/^KOKORO_URL=/m.test(cur)) {
+      fs.appendFileSync(
+        envPath,
+        `${cur.endsWith('\n') || !cur ? '' : '\n'}KOKORO_URL=${KOKORO_URL}\n`,
+      );
+      log(`\n✓ Added KOKORO_URL to .env`);
+    } else log(`\n• KOKORO_URL already in .env`);
+  } catch {
+    log('\n! Could not edit .env — add this line yourself: KOKORO_URL=' + KOKORO_URL);
+  }
 
   const nodeBin = process.execPath;
   log('\n──────────────────────────────────────────');
-  log(`Model files: ${got}/${FILES.length}   Engine: ${engineOk ? 'kokoro-onnx (venv)' : 'NOT installed'}`);
+  log(
+    `Model files: ${got}/${FILES.length}   Engine: ${engineOk ? 'kokoro-onnx (venv)' : 'NOT installed'}`,
+  );
   if (!engineOk || got < FILES.length) {
     log('\nFinish manually:');
-    if (!engineOk) log('  • sudo apt-get install -y python3-venv && npm run setup-kokoro   (re-run)');
+    if (!engineOk)
+      log('  • sudo apt-get install -y python3-venv && npm run setup-kokoro   (re-run)');
     if (got < FILES.length) log(`  • download the model files from ${REL} into ./kokoro`);
   } else {
     log('\nTest it now (leave running in one terminal):');
     log(`  ${venvPython} ${path.join('tools', 'kokoro', 'server.py')}`);
     log('  # then in another terminal:');
     log(`  curl -s -o /tmp/k.wav -w "synth time: %{time_total}s\\n" -X POST ${KOKORO_URL} \\`);
-    log(`    -H 'content-type: application/json' -d '{"input":"How natural does Kokoro sound now.","voice":"af_bella"}'`);
-    log('  # (that clip is ~2.5s of audio — under that synth time = faster than real-time = gapless)');
+    log(
+      `    -H 'content-type: application/json' -d '{"input":"How natural does Kokoro sound now.","voice":"af_bella"}'`,
+    );
+    log(
+      '  # (that clip is ~2.5s of audio — under that synth time = faster than real-time = gapless)',
+    );
     // Write the systemd unit to a file (no error-prone heredoc paste) — the user just
     // copies it into place with sudo. Only enable it once the foreground run works.
     const unit = `[Unit]
@@ -106,13 +143,17 @@ User=${process.env.USER || 'pi'}
 WantedBy=multi-user.target
 `;
     const unitPath = path.join(KDIR, 'wondry-kokoro.service');
-    try { fs.writeFileSync(unitPath, unit); } catch {}
+    try {
+      fs.writeFileSync(unitPath, unit);
+    } catch {}
     log('\nEasiest: let the CLI install the service + restart for you:');
     log('  wondry kokoro');
     log('\nOr do it by hand — once the foreground test above sounds good, run it on boot:');
     log(`  sudo cp ${unitPath} /etc/systemd/system/wondry-kokoro.service`);
     log('  sudo systemctl enable --now wondry-kokoro && wondry restart');
-    log('\nThen:  parent console → Kids → pick a kid → Voice → Kokoro → choose one → ▶ Hear voice.');
+    log(
+      '\nThen:  parent console → Kids → pick a kid → Voice → Kokoro → choose one → ▶ Hear voice.',
+    );
   }
   void nodeBin;
 })();

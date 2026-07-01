@@ -11,6 +11,12 @@
 //     async resolve(query, { maxBytes }) -> { bytes, mime, ext, credit, license, sourceUrl } | null
 //   }
 const sources = new Map();
-export function registerSource(s) { if (s && s.id) sources.set(s.id, s); }
-export function getSource(id) { return sources.get(id); }
-export function allSources() { return [...sources.values()]; }
+export function registerSource(s) {
+  if (s && s.id) sources.set(s.id, s);
+}
+export function getSource(id) {
+  return sources.get(id);
+}
+export function allSources() {
+  return [...sources.values()];
+}

@@ -11,7 +11,9 @@ const router = createBrowserRouter([
   { path: '/', element: <Kiosk /> },
   { path: '/preview/:id', element: <Preview /> },
   {
-    path: '/admin', element: <Admin />, children: [
+    path: '/admin',
+    element: <Admin />,
+    children: [
       { index: true, element: <Navigate to="log" replace /> },
       { path: 'log', element: <Log /> },
       { path: 'content', element: <Content /> },
@@ -29,5 +31,7 @@ const router = createBrowserRouter([
 ]);
 
 createRoot(document.getElementById('root')!).render(
-  <StrictMode><RouterProvider router={router} /></StrictMode>,
+  <StrictMode>
+    <RouterProvider router={router} />
+  </StrictMode>,
 );

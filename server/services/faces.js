@@ -9,31 +9,50 @@
 // Embeddings never leave the device; we store the vector + a tiny thumbnail.
 import { getConfig } from '../config.js';
 import {
-  getKV, createFaceCluster, updateFaceClusterCentroid, insertFaceSample,
-  faceClusterCentroids, assignedFaceGalleries, clusterSampleCount, trimClusterSamples,
+  getKV,
+  createFaceCluster,
+  updateFaceClusterCentroid,
+  insertFaceSample,
+  faceClusterCentroids,
+  assignedFaceGalleries,
+  clusterSampleCount,
+  trimClusterSamples,
 } from '../db.js';
 import { emit } from '../events.js';
 
-export function facesEnabled() { return getKV('faces_enabled', '0') === '1'; }
-function cfg() { return getConfig().faces || {}; }
+export function facesEnabled() {
+  return getKV('faces_enabled', '0') === '1';
+}
+function cfg() {
+  return getConfig().faces || {};
+}
 const num = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
 
 // --- pure vector math (exported for tests) ---
 export function normalize(v) {
-  let s = 0; for (const x of v) s += x * x;
+  let s = 0;
+  for (const x of v) s += x * x;
   s = Math.sqrt(s) || 1;
   return v.map((x) => x / s);
 }
 // Cosine similarity of two L2-normalized vectors == dot product.
 export function cosine(a, b) {
-  let s = 0; const n = Math.min(a.length, b.length);
+  let s = 0;
+  const n = Math.min(a.length, b.length);
   for (let i = 0; i < n; i++) s += a[i] * b[i];
   return s;
 }
 // Nearest cluster centroid to an embedding. Returns { best, sim }.
 export function nearest(embedding, centroids) {
-  let best = null, sim = -2;
-  for (const c of centroids) { const s = cosine(embedding, c.centroid); if (s > sim) { sim = s; best = c; } }
+  let best = null,
+    sim = -2;
+  for (const c of centroids) {
+    const s = cosine(embedding, c.centroid);
+    if (s > sim) {
+      sim = s;
+      best = c;
+    }
+  }
   return { best, sim };
 }
 
@@ -42,7 +61,11 @@ export function nearest(embedding, centroids) {
 export function cleanEmbedding(v) {
   if (!Array.isArray(v) || v.length < 16 || v.length > 2048) return null;
   const out = new Array(v.length);
-  for (let i = 0; i < v.length; i++) { const n = Number(v[i]); if (!Number.isFinite(n)) return null; out[i] = n; }
+  for (let i = 0; i < v.length; i++) {
+    const n = Number(v[i]);
+    if (!Number.isFinite(n)) return null;
+    out[i] = n;
+  }
   return normalize(out);
 }
 // Only accept small raster data-URI thumbnails (no SVG → no script vector).
@@ -56,7 +79,8 @@ export function cleanThumb(t) {
 // start a new one), update that cluster's centroid (running mean direction), store the
 // sample, and cap the cluster. Returns the cluster id (or null on bad input).
 export function bankSample({ embedding, thumb, quality = 0 }) {
-  const e = cleanEmbedding(embedding); if (!e) return null;
+  const e = cleanEmbedding(embedding);
+  if (!e) return null;
   const th = num(cfg().clusterThreshold, 0.5);
   const { best, sim } = nearest(e, faceClusterCentroids());
   let clusterId;
@@ -78,11 +102,21 @@ export function bankSample({ embedding, thumb, quality = 0 }) {
 // Identify an embedding against enrolled galleries. Returns the best match above the
 // (stricter) match threshold, or null for unknown.
 export function identify(embedding) {
-  const e = cleanEmbedding(embedding); if (!e) return null;
+  const e = cleanEmbedding(embedding);
+  if (!e) return null;
   const th = num(cfg().matchThreshold, 0.55);
-  let best = null, sim = -2;
-  for (const g of assignedFaceGalleries()) { const s = cosine(e, g.centroid); if (s > sim) { sim = s; best = g; } }
-  return best && sim >= th ? { profileId: best.profileId, confidence: sim, clusterId: best.clusterId } : null;
+  let best = null,
+    sim = -2;
+  for (const g of assignedFaceGalleries()) {
+    const s = cosine(e, g.centroid);
+    if (s > sim) {
+      sim = s;
+      best = g;
+    }
+  }
+  return best && sim >= th
+    ? { profileId: best.profileId, confidence: sim, clusterId: best.clusterId }
+    : null;
 }
 
 // Handle one frame of observed faces from the sidecar. Identifies every face, banks
@@ -95,9 +129,16 @@ export function observe(faces) {
   for (const f of list) {
     const m = identify(f.embedding);
     if (m) identified.push({ trackId: f.trackId ?? null, ...m });
-    if (f.thumb) { if (bankSample(f)) banked++; }   // thumb present == sidecar wants it banked (throttled there)
+    if (f.thumb) {
+      if (bankSample(f)) banked++;
+    } // thumb present == sidecar wants it banked (throttled there)
   }
   const best = identified.sort((a, b) => b.confidence - a.confidence)[0];
-  if (best) emit('face.recognized', { profileId: best.profileId, confidence: best.confidence, trackId: best.trackId });
+  if (best)
+    emit('face.recognized', {
+      profileId: best.profileId,
+      confidence: best.confidence,
+      trackId: best.trackId,
+    });
   return { banked, identified };
 }

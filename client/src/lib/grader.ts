@@ -6,12 +6,17 @@
 import type { WordMark } from './types';
 
 const normalize = (s: string) =>
-  (s || '').toLowerCase().replace(/[^a-z0-9'\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  (s || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9'\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 const tokenize = (s: string) => normalize(s).split(' ').filter(Boolean);
 
 // Small Levenshtein, capped — only used to decide "close enough" word matches.
 function lev(a: string, b: string): number {
-  const m = a.length, n = b.length;
+  const m = a.length,
+    n = b.length;
   if (Math.abs(m - n) > 2) return 3;
   let prev = Array.from({ length: n + 1 }, (_, i) => i);
   for (let i = 1; i <= m; i++) {
@@ -38,7 +43,11 @@ export function wordEq(a: string, b: string): boolean {
 export const normWord = (w: string) => (w || '').toLowerCase().replace(/[^a-z0-9']/g, '');
 export const splitWords = (s: string) => (s || '').split(/\s+/).filter(Boolean);
 
-export interface LiveAlign { cursor: number; matched: boolean[]; trailingUnmatched: number }
+export interface LiveAlign {
+  cursor: number;
+  matched: boolean[];
+  trailingUnmatched: number;
+}
 
 // Live, forgiving alignment of a running speech buffer against the expected words.
 // `expected` and `recognized` are already normalized (normWord). Walks forward,
@@ -49,20 +58,41 @@ export interface LiveAlign { cursor: number; matched: boolean[]; trailingUnmatch
 // unmatched (a "they're stuck on this word" signal for a gentle hint).
 export function alignLive(expected: string[], recognized: string[]): LiveAlign {
   const matched = expected.map(() => false);
-  let ci = 0, ri = 0, lastMatchRi = -1;
+  let ci = 0,
+    ri = 0,
+    lastMatchRi = -1;
   while (ci < expected.length && ri < recognized.length) {
-    if (wordEq(recognized[ri], expected[ci])) { matched[ci] = true; ci++; lastMatchRi = ri; ri++; continue; }
+    if (wordEq(recognized[ri], expected[ci])) {
+      matched[ci] = true;
+      ci++;
+      lastMatchRi = ri;
+      ri++;
+      continue;
+    }
     // Did they actually say a slightly-later expected word? Then the recognizer
     // dropped the in-between word(s) — skip past them (left unmatched) and match.
     let skip = -1;
-    for (let k = 1; k <= 2 && ci + k < expected.length; k++) if (wordEq(recognized[ri], expected[ci + k])) { skip = k; break; }
-    if (skip > 0) { ci += skip; matched[ci] = true; ci++; lastMatchRi = ri; ri++; }
-    else ri++; // recognized noise / wrong word — ignore it (never punishes)
+    for (let k = 1; k <= 2 && ci + k < expected.length; k++)
+      if (wordEq(recognized[ri], expected[ci + k])) {
+        skip = k;
+        break;
+      }
+    if (skip > 0) {
+      ci += skip;
+      matched[ci] = true;
+      ci++;
+      lastMatchRi = ri;
+      ri++;
+    } else ri++; // recognized noise / wrong word — ignore it (never punishes)
   }
   return { cursor: ci, matched, trailingUnmatched: recognized.length - 1 - lastMatchRi };
 }
 
-export interface GradeResult { score: number; perWord: WordMark[]; expectedWords: string[] }
+export interface GradeResult {
+  score: number;
+  perWord: WordMark[];
+  expectedWords: string[];
+}
 
 export function gradeReading(expected: string, transcript: string): GradeResult {
   const exp = tokenize(expected);
@@ -70,17 +100,24 @@ export function gradeReading(expected: string, transcript: string): GradeResult 
   if (!exp.length) return { score: 1, perWord: [], expectedWords: [] };
 
   // LCS over (exp, got) with fuzzy equality; backtrack to mark matched exp words.
-  const m = exp.length, n = got.length;
+  const m = exp.length,
+    n = got.length;
   const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
   for (let i = 1; i <= m; i++)
     for (let jj = 1; jj <= n; jj++)
-      dp[i][jj] = wordEq(exp[i - 1], got[jj - 1]) ? dp[i - 1][jj - 1] + 1 : Math.max(dp[i - 1][jj], dp[i][jj - 1]);
+      dp[i][jj] = wordEq(exp[i - 1], got[jj - 1])
+        ? dp[i - 1][jj - 1] + 1
+        : Math.max(dp[i - 1][jj], dp[i][jj - 1]);
 
   const matched = new Set<number>();
-  let i = m, jj = n;
+  let i = m,
+    jj = n;
   while (i > 0 && jj > 0) {
-    if (wordEq(exp[i - 1], got[jj - 1]) && dp[i][jj] === dp[i - 1][jj - 1] + 1) { matched.add(i - 1); i--; jj--; }
-    else if (dp[i - 1][jj] >= dp[i][jj - 1]) i--;
+    if (wordEq(exp[i - 1], got[jj - 1]) && dp[i][jj] === dp[i - 1][jj - 1] + 1) {
+      matched.add(i - 1);
+      i--;
+      jj--;
+    } else if (dp[i - 1][jj] >= dp[i][jj - 1]) i--;
     else jj--;
   }
 

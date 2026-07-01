@@ -7,7 +7,13 @@ const LIGHT_THRESHOLD = 0.45;
 
 export function readableOn(hex: string): string {
   const c = (hex || '').replace('#', '').trim();
-  const full = c.length === 3 ? c.split('').map((ch) => ch + ch).join('') : c;
+  const full =
+    c.length === 3
+      ? c
+          .split('')
+          .map((ch) => ch + ch)
+          .join('')
+      : c;
   if (full.length !== 6 || /[^0-9a-f]/i.test(full)) return '#ffffff';
   const ch = (i: number) => parseInt(full.slice(i, i + 2), 16) / 255;
   const lin = (v: number) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));

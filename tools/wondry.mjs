@@ -15,12 +15,26 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 function baseUrl() {
   let port = process.env.PORT;
-  if (!port) { try { port = JSON.parse(fs.readFileSync(path.join(ROOT, 'config.json'), 'utf8')).port; } catch { /* default */ } }
+  if (!port) {
+    try {
+      port = JSON.parse(fs.readFileSync(path.join(ROOT, 'config.json'), 'utf8')).port;
+    } catch {
+      /* default */
+    }
+  }
   return `http://localhost:${port || 8080}`;
 }
-const get = async (p) => { const r = await fetch(baseUrl() + p); if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); };
+const get = async (p) => {
+  const r = await fetch(baseUrl() + p);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+};
 const post = async (p, body) => {
-  const r = await fetch(baseUrl() + p, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}) });
+  const r = await fetch(baseUrl() + p, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  });
   if (!r.ok) throw new Error(`HTTP ${r.status} ${await r.text()}`);
   return r.json();
 };
@@ -44,26 +58,45 @@ Changes apply to the kiosk instantly. Set values, let it sit a second, then pres
 play a test sound and listen for a clipped start. Adjust until it's clean AND silent.
 `);
   let cur;
-  try { cur = await get('/api/audio'); }
-  catch (e) { console.error(`Couldn't reach the server at ${baseUrl()} — is Wondry running?  (${e.message})`); return; }
+  try {
+    cur = await get('/api/audio');
+  } catch (e) {
+    console.error(`Couldn't reach the server at ${baseUrl()} — is Wondry running?  (${e.message})`);
+    return;
+  }
 
   for (;;) {
     console.log(`\nCurrent:  warmHz=${cur.warmHz}   warmGain=${cur.warmGain}`);
-    const input = (await ask("→ set (e.g. '20000 0.05'), 't' to test sound, Enter to keep, 'q' to quit: ")).trim();
+    const input = (
+      await ask("→ set (e.g. '20000 0.05'), 't' to test sound, Enter to keep, 'q' to quit: ")
+    ).trim();
     if (input === 'q' || input === 'quit') break;
     if (input === '') continue;
     if (input === 't' || input === 'test') {
-      try { await post('/api/audio/test'); console.log('▶ played a test sound on the kiosk — listen for a clipped attack.'); }
-      catch (e) { console.error(`  test failed: ${e.message}`); }
+      try {
+        await post('/api/audio/test');
+        console.log('▶ played a test sound on the kiosk — listen for a clipped attack.');
+      } catch (e) {
+        console.error(`  test failed: ${e.message}`);
+      }
       continue;
     }
     const nums = input.split(/\s+/).map(Number);
     const body = {};
     if (Number.isFinite(nums[0])) body.warmHz = nums[0];
     if (nums.length > 1 && Number.isFinite(nums[1])) body.warmGain = nums[1];
-    if (!('warmHz' in body) && !('warmGain' in body)) { console.log("  didn't understand — try '20000 0.05' (Hz then gain), '20000' (just Hz), 't', or 'q'."); continue; }
-    try { cur = await post('/api/audio', body); console.log(`✓ applied: warmHz=${cur.warmHz}  warmGain=${cur.warmGain}`); }
-    catch (e) { console.error(`  apply failed: ${e.message}`); }
+    if (!('warmHz' in body) && !('warmGain' in body)) {
+      console.log(
+        "  didn't understand — try '20000 0.05' (Hz then gain), '20000' (just Hz), 't', or 'q'.",
+      );
+      continue;
+    }
+    try {
+      cur = await post('/api/audio', body);
+      console.log(`✓ applied: warmHz=${cur.warmHz}  warmGain=${cur.warmGain}`);
+    } catch (e) {
+      console.error(`  apply failed: ${e.message}`);
+    }
   }
   console.log('Saved — the kiosk will use these values from now on.');
 }
@@ -72,6 +105,11 @@ const sub = process.argv[2];
 (async () => {
   try {
     if (sub === 'audio') await audioCmd();
-    else console.log('Usage: wondry <command>\n  audio   tune the audio keepalive (anti-clipping) live on the kiosk');
-  } finally { rl.close(); }
+    else
+      console.log(
+        'Usage: wondry <command>\n  audio   tune the audio keepalive (anti-clipping) live on the kiosk',
+      );
+  } finally {
+    rl.close();
+  }
 })();

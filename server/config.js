@@ -31,8 +31,12 @@ loadDotEnv();
 
 let fileConfig = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
 
-export function getConfig() { return fileConfig; }
-export function getRichness() { return fileConfig.richness || { default: 'standard', tiers: {} }; }
+export function getConfig() {
+  return fileConfig;
+}
+export function getRichness() {
+  return fileConfig.richness || { default: 'standard', tiers: {} };
+}
 
 // Resolve a provider object by its name in config.providers, injecting the API key
 // (or transparently falling back to mock when a key-backed provider has no key).
@@ -63,7 +67,7 @@ export function resolveProvider(task) {
 
 export function liveGenerationEnabled() {
   return Object.values(fileConfig.providers).some(
-    (p) => p.api_key_env && process.env[p.api_key_env]
+    (p) => p.api_key_env && process.env[p.api_key_env],
   );
 }
 
