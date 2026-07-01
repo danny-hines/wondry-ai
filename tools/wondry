@@ -36,6 +36,33 @@ case "${1:-help}" in
   status)  systemctl status "$SERVICE" --no-pager || true;;
   logs)    journalctl -u "$SERVICE" -f;;
   audio)   bash "$DIR/tools/devices.sh" select;;
+  kokoro)
+    # Turnkey Kokoro (optional natural neural voice): ensure the engine+model exist,
+    # install the sidecar service, health-check it, then restart the app so it exposes
+    # the Kokoro voices. Idempotent — safe to re-run.
+    UNIT="$DIR/kokoro/wondry-kokoro.service"
+    if [ ! -f "$UNIT" ] || [ ! -d "$DIR/.venv-kokoro" ]; then
+      echo "Setting up the Kokoro engine + model (one-time; downloads ~170MB)…"
+      npm run setup-kokoro
+    fi
+    [ -f "$UNIT" ] || { echo "Kokoro setup didn't produce $UNIT — re-run 'npm run setup-kokoro' and check its output." >&2; exit 1; }
+    echo "Installing the Kokoro sidecar service…"
+    sudo cp "$UNIT" /etc/systemd/system/wondry-kokoro.service
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now wondry-kokoro
+    # Health-check the sidecar (derive its URL from .env; it loads the model + warms the graph on boot).
+    kurl="$(grep -E '^KOKORO_URL=' .env 2>/dev/null | cut -d= -f2- || true)"
+    health="${kurl%/v1/audio/speech}/health"; health="${health:-http://127.0.0.1:8880/health}"
+    printf "Waiting for the sidecar to warm up"
+    ok=; for _ in $(seq 1 40); do
+      if curl -fsS "$health" >/dev/null 2>&1; then ok=1; break; fi
+      printf "."; sleep 1
+    done; echo
+    if [ "$ok" = 1 ]; then echo "✓ Kokoro sidecar is up ($health)."
+    else echo "! Sidecar didn't answer $health yet — check: sudo systemctl status wondry-kokoro --no-pager" >&2; fi
+    sudo systemctl restart "$SERVICE"
+    echo "Restarted Wondry. Next: parent console → Kids → pick a kid → Voice → Kokoro → choose one → ▶ Hear voice."
+    ;;
   version) git -C "$DIR" log -1 --format='%h %s (%cr)';;
   url)
     ip="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
@@ -52,6 +79,7 @@ case "${1:-help}" in
     echo "  status    service status"
     echo "  logs      follow the server logs"
     echo "  audio     pick the microphone / speaker / camera + set volume levels"
+    echo "  kokoro    install the optional natural-voice (Kokoro) sidecar + enable it"
     echo "  version   the installed git revision"
     echo "  url       the kiosk + parent-console URLs"
     ;;

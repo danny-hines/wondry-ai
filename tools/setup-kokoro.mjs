@@ -107,10 +107,12 @@ WantedBy=multi-user.target
 `;
     const unitPath = path.join(KDIR, 'wondry-kokoro.service');
     try { fs.writeFileSync(unitPath, unit); } catch {}
-    log('\nOnce the foreground test above sounds good, run it on boot:');
+    log('\nEasiest: let the CLI install the service + restart for you:');
+    log('  wondry kokoro');
+    log('\nOr do it by hand — once the foreground test above sounds good, run it on boot:');
     log(`  sudo cp ${unitPath} /etc/systemd/system/wondry-kokoro.service`);
-    log('  sudo systemctl enable --now wondry-kokoro');
-    log('\nThen:  wondry restart   →   parent console → Kids → Voice → Kokoro → pick one → ▶ Hear voice.');
+    log('  sudo systemctl enable --now wondry-kokoro && wondry restart');
+    log('\nThen:  parent console → Kids → pick a kid → Voice → Kokoro → choose one → ▶ Hear voice.');
   }
   void nodeBin;
 })();

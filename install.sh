@@ -193,6 +193,15 @@ if confirm "Install Piper TTS now (natural offline voice; recommended)?" y; then
   say "Setting up Piper…"; npm run setup-piper || warn "Piper setup hit an issue — you can re-run 'npm run setup-piper' later."
 fi
 
+# ---- 7b. optional: Kokoro TTS (more natural neural voice) -------------------
+# Runs as its own always-on sidecar (systemd). `wondry kokoro` does the whole thing:
+# venv + model download, install/enable the service, and restart the app. Off by
+# default per-kid; only kids set to a "kokoro:" voice use it, else browser/Piper.
+if confirm "Install Kokoro TTS too (more natural neural voice; downloads ~170MB)?" n; then
+  spin "Installing Kokoro prerequisites (python3-venv)" sudo apt-get install -y -qq python3-venv
+  "$INSTALL_DIR/tools/wondry" kokoro || warn "Kokoro setup hit an issue — you can re-run 'wondry kokoro' later."
+fi
+
 # ---- 8. optional: whisper.cpp STT (compiles on the Pi — slow) --------------
 # The kiosk always runs in server-STT mode: kiosk Chromium has no working Web
 # Speech API, so the mic must capture audio and POST to /api/stt. Without whisper
