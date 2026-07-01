@@ -1,6 +1,6 @@
 // Setup for the Kokoro TTS sidecar (optional, more-natural voice). Run: npm run setup-kokoro
 // 1) installs kokoro-onnx + onnxruntime into a dedicated venv (.venv-kokoro) — no torch
-// 2) downloads the quantized (int8) Kokoro model + voices into ./kokoro
+// 2) downloads the fp16 Kokoro model + voices into ./kokoro (fp16 beats int8 on the Pi's ARM)
 // 3) points Wondry at it (.env KOKORO_URL) and prints how to run it (now + as a service)
 // The sidecar (tools/kokoro/server.py) exposes the OpenAI-compatible endpoint the app
 // already speaks. Degrades gracefully: on any failure it prints manual steps.
@@ -18,9 +18,10 @@ const venvPython = path.join(VENV, process.platform === 'win32' ? 'Scripts' : 'b
 const PORT = process.env.KOKORO_PORT || '8880';
 const KOKORO_URL = `http://127.0.0.1:${PORT}/v1/audio/speech`;
 
-// int8 = fastest/smallest; swap to kokoro-v1.0.fp16.onnx if int8 quality disappoints.
+// fp16 on the Pi: ARM lacks good int8 kernels, so fp16 is ~2.4x faster there (int8 was
+// ~7.1s vs fp16 ~2.9s for a ~2.5s clip). Swap to kokoro-v1.0.int8.onnx only on x86.
 const REL = 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0';
-const FILES = ['kokoro-v1.0.int8.onnx', 'voices-v1.0.bin'];
+const FILES = ['kokoro-v1.0.fp16.onnx', 'voices-v1.0.bin'];
 
 const log = (...a) => console.log(...a);
 function findPython() {

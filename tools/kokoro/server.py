@@ -3,10 +3,11 @@
 
 Exposes the OpenAI-compatible endpoint Wondry's TTS adapter already speaks
 (POST /v1/audio/speech -> audio/wav), backed by kokoro-onnx on onnxruntime — the
-same runtime Piper runs fast on the Pi, and NO torch. Uses the quantized (int8)
-model by default for speed. Deliberately dependency-light: stdlib http.server only.
+same runtime Piper runs fast on the Pi, and NO torch. Defaults to the fp16 model:
+on ARM (the Pi) it's ~2.4x faster than int8, which lacks good aarch64 kernels.
+Deliberately dependency-light: stdlib http.server only.
 
-  KOKORO_MODEL   path to the .onnx model   (default: <repo>/kokoro/kokoro-v1.0.int8.onnx)
+  KOKORO_MODEL   path to the .onnx model   (default: <repo>/kokoro/kokoro-v1.0.fp16.onnx)
   KOKORO_VOICES  path to voices .bin        (default: <repo>/kokoro/voices-v1.0.bin)
   KOKORO_PORT    listen port                (default: 8880)
   KOKORO_DEFAULT_VOICE  fallback voice      (default: af_bella)
@@ -26,7 +27,7 @@ from kokoro_onnx import Kokoro  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
-MODEL = os.environ.get("KOKORO_MODEL") or os.path.join(REPO, "kokoro", "kokoro-v1.0.int8.onnx")
+MODEL = os.environ.get("KOKORO_MODEL") or os.path.join(REPO, "kokoro", "kokoro-v1.0.fp16.onnx")
 VOICES = os.environ.get("KOKORO_VOICES") or os.path.join(REPO, "kokoro", "voices-v1.0.bin")
 PORT = int(os.environ.get("KOKORO_PORT", "8880"))
 DEFAULT_VOICE = os.environ.get("KOKORO_DEFAULT_VOICE", "af_bella")
