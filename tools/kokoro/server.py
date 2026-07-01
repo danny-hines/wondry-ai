@@ -38,6 +38,13 @@ for p in (MODEL, VOICES):
 
 kokoro = Kokoro(MODEL, VOICES)
 
+# Warm the graph: onnxruntime does graph-opt + buffer allocation on the FIRST create(),
+# which otherwise makes the first real response lag between sentences. Pay it upfront.
+try:
+    kokoro.create("Hello.", voice=DEFAULT_VOICE, speed=1.0, lang="en-us")
+except Exception:  # noqa: BLE001 — warmup is best-effort; real requests still work
+    pass
+
 
 def to_wav(samples, rate):
     """float32 [-1,1] mono -> 16-bit PCM WAV bytes (Web Audio decodes this directly)."""
