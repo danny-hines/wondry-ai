@@ -16,6 +16,11 @@ voices/
 vendor/
 .venv-piper/
 
+# Kokoro TTS sidecar (created by: npm run setup-kokoro)
+.venv-kokoro/
+kokoro/*.onnx
+kokoro/*.bin
+
 # Wake-word add-on venv (created by: install.sh)
 .venv-wake/
 

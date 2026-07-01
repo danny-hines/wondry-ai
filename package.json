@@ -13,6 +13,7 @@
     "test": "node --experimental-sqlite --test",
     "verify": "bash tools/verify.sh",
     "setup-piper": "node tools/setup-piper.mjs",
+    "setup-kokoro": "node tools/setup-kokoro.mjs",
     "eval": "node --experimental-sqlite tools/eval-content.mjs",
     "audio": "node tools/wondry.mjs audio",
     "dev": "concurrently -k -n server,client \"npm:dev:server\" \"npm:dev:client\"",

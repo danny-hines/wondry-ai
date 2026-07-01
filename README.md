@@ -323,8 +323,10 @@ is the bottleneck on the Pi rather than the gaps:
 - `serverEnv` — extra env for the warm Piper server, e.g. `{"OMP_NUM_THREADS":"4"}` to push all Pi
   cores (experimental — onnxruntime already multi-threads, so measure it).
 
-**Kokoro (optional, more natural).** A second TTS engine alongside Piper. Run a Kokoro server —
-[Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI) is OpenAI-compatible — then set
+**Kokoro (optional, more natural).** A second TTS engine alongside Piper. Fastest path on the Pi:
+`npm run setup-kokoro` — installs a lean sidecar (`kokoro-onnx` on **onnxruntime, no torch**, quantized
+int8 model; `tools/kokoro/server.py`), downloads the model, and points the app at it. (Alternatively run
+any OpenAI-compatible server like [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI).) Then set
 `config.json` → `tts.kokoro.url` to its `/v1/audio/speech` endpoint (or env `KOKORO_URL`); empty = off.
 Its voices then show up in the **Kids → Voice** picker (stored as `kokoro:<name>`), so you choose per
 child. The three engines are independent — **browser** is always available, Piper and Kokoro are each
