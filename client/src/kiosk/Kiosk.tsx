@@ -8,7 +8,6 @@ import { startThinkingSound, stopThinkingSound } from './thinkingSound';
 import { playStartListening, playStopListening } from './listenSound';
 import { playAlarm } from './alarmSound';
 import { primeAudio, applyWarm, playTestTone } from './audio';
-import { rendererFor } from '../content/registry';
 import {
   getProfiles,
   getTray,
@@ -18,19 +17,17 @@ import {
   cancelSchedule,
   getAudioConfig,
 } from '../lib/api';
-import { mdToHtml } from '../lib/markdown';
-import { maskProfanity } from '../lib/profanity';
 import { readableOn } from '../lib/contrast';
 import type { Profile, Artifact, WSMessage, ScheduleItem } from '../lib/types';
+import type { View, Item, Reveal } from './types';
+import { TimerChips } from './TimerChips';
+import { CornerControls } from './CornerControls';
+import { InputBar } from './InputBar';
+import { ConversationBubbles } from './ConversationBubbles';
+import { PanelContent } from './PanelContent';
 import './kiosk.css';
 
 const IDLE_MS = 2 * 60 * 1000;
-
-type Item =
-  | { key: string; kind: 'bubble'; role: 'kid' | 'avatar'; text: string }
-  | { key: string; kind: 'card'; artifact: Artifact };
-
-type View = 'idle' | 'conversation' | 'split';
 
 export default function Kiosk() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -42,9 +39,7 @@ export default function Kiosk() {
   // Reveal state for the reply being spoken: `pending` shows a "…" while TTS synthesizes,
   // then `shown` words are revealed in time with the audio. Cleared (→ full text) when
   // speech ends or is interrupted.
-  const [reveal, setReveal] = useState<{ key: string; pending: boolean; shown: number } | null>(
-    null,
-  );
+  const [reveal, setReveal] = useState<Reveal | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [openArt, setOpenArt] = useState<Artifact | null>(null);
   const [tray, setTray] = useState({ count: 0, unseen: 0 });
@@ -710,72 +705,27 @@ export default function Kiosk() {
           )}
         </div>
         <div id="convo">
-          <div id="bubbles" ref={bubblesRef}>
-            {items.map((it) =>
-              it.kind === 'bubble' ? (
-                it.role === 'avatar' ? (
-                  (() => {
-                    const rv = reveal && reveal.key === it.key ? reveal : null;
-                    const safe = maskProfanity(it.text); // final render gate
-                    const html = rv?.pending
-                      ? '<span class="speak-dots">…</span>'
-                      : rv
-                        ? mdToHtml(safe.split(/\s+/).slice(0, rv.shown).join(' '))
-                        : mdToHtml(safe);
-                    return (
-                      <div
-                        key={it.key}
-                        className={`bubble avatar${it.key === speakingId ? ' speaking' : ''}`}
-                        title="Tap to hear again"
-                        onClick={() => replayBubble(it.key, it.text)}
-                        dangerouslySetInnerHTML={{ __html: html }}
-                      />
-                    );
-                  })()
-                ) : (
-                  <div key={it.key} className="bubble kid">
-                    {maskProfanity(it.text)}
-                  </div>
-                )
-              ) : (
-                <ArtifactCard
-                  key={it.key}
-                  artifact={it.artifact}
-                  onOpen={() => openArtifact(it.artifact)}
-                  onRetry={() =>
-                    sendTurn('make a page about ' + (it.artifact.subject || it.artifact.title))
-                  }
-                />
-              ),
-            )}
-          </div>
+          <ConversationBubbles
+            bubblesRef={bubblesRef}
+            items={items}
+            reveal={reveal}
+            speakingId={speakingId}
+            onReplay={replayBubble}
+            onOpenArtifact={openArtifact}
+            onRetry={(a) => sendTurn('make a page about ' + (a.subject || a.title))}
+          />
           {!voiceOnly && (
-            <div id="inputbar">
-              <input
-                id="prompt"
-                value={prompt}
-                placeholder="Ask me anything…  (type or tap 🎤)"
-                onChange={(e) => setPrompt(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') sendTurn(prompt);
-                }}
-              />
-              <button
-                id="mic"
-                className={micLive ? 'live' : ''}
-                title="Speak"
-                onClick={() => {
-                  const r = recRef.current;
-                  if (!r) return;
-                  micLive ? r.stop() : r.start();
-                }}
-              >
-                🎤
-              </button>
-              <button id="send" onClick={() => sendTurn(prompt)}>
-                Send
-              </button>
-            </div>
+            <InputBar
+              prompt={prompt}
+              setPrompt={setPrompt}
+              micLive={micLive}
+              onSend={() => sendTurn(prompt)}
+              onMic={() => {
+                const r = recRef.current;
+                if (!r) return;
+                micLive ? r.stop() : r.start();
+              }}
+            />
           )}
         </div>
       </div>
@@ -786,121 +736,34 @@ export default function Kiosk() {
             ⤢
           </button>
         </div>
-        <div id="content">
-          {splitMode === 'tray' ? (
-            <div className="tray">
-              {trayList.length ? (
-                trayList.map((a) => (
-                  <button
-                    key={a.id}
-                    className="tile"
-                    style={{
-                      background: a.color || '#8b5cf6',
-                      color: readableOn(a.color || '#8b5cf6'),
-                    }}
-                    onClick={() => {
-                      if (user) markEngagement(a.id, 'seen', user.id).then(refreshTray);
-                      openArtifact(a);
-                    }}
-                  >
-                    {!a.seen && <span className="new">NEW</span>}
-                    <span className="te">{a.emoji || '✨'}</span>
-                    <span className="tt">{a.title}</span>
-                    <span className="src">
-                      {a.source === 'parent'
-                        ? '★ for you'
-                        : a.source === 'proactive'
-                          ? '✦ discovered'
-                          : 'you asked'}
-                    </span>
-                  </button>
-                ))
-              ) : (
-                <div className="empty">No pages yet. Ask me to build one!</div>
-              )}
-            </div>
-          ) : openGenerating ? (
-            <div className="tray">
-              <div className="empty">
-                ✨ {rendererFor(openArt?.type) ? 'Getting it ready…' : 'Making your page…'} hang
-                tight!
-              </div>
-            </div>
-          ) : openId ? (
-            (() => {
-              const R = rendererFor(openArt?.type);
-              return R ? (
-                <R
-                  artifactId={openId}
-                  profile={user}
-                  speak={speak}
-                  speakingId={speakingId}
-                  setMood={(m) => avatarRef.current?.setMood(m)}
-                />
-              ) : (
-                <iframe
-                  sandbox="allow-scripts"
-                  src={`/api/artifact/${openId}?chrome=panel`}
-                  title="page"
-                />
-              );
-            })()
-          ) : null}
-        </div>
+        <PanelContent
+          splitMode={splitMode}
+          trayList={trayList}
+          openGenerating={openGenerating}
+          openId={openId}
+          openArt={openArt}
+          user={user}
+          speak={speak}
+          speakingId={speakingId}
+          setMood={(m) => avatarRef.current?.setMood(m)}
+          onOpenTile={(a) => {
+            if (user) markEngagement(a.id, 'seen', user.id).then(refreshTray);
+            openArtifact(a);
+          }}
+        />
       </div>
 
-      {timers.length > 0 && (
-        <div id="timers">
-          {timers.map((t) => {
-            const remain = Math.max(0, t.fire_at - nowTick);
-            const s = Math.ceil(remain / 1000);
-            const mmss = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-            return (
-              <button
-                key={t.id}
-                className={`timerChip${remain === 0 ? ' done' : ''}`}
-                title="Tap to cancel"
-                onClick={() => dismissTimer(t.id)}
-              >
-                <span className="tcIcon" aria-hidden="true">
-                  ⏰
-                </span>
-                <span className="tcTime">{mmss}</span>
-                {t.label && <span className="tcLabel">{t.label}</span>}
-                <span className="tcX" aria-hidden="true">
-                  ✕
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      )}
+      <TimerChips timers={timers} nowTick={nowTick} onDismiss={dismissTimer} />
 
-      <div id="corner" ref={cornerRef}>
-        <span id="initials" title="Tap to switch user" onClick={switchUser}>
-          {user?.initials || '··'}
-        </span>
-        <button
-          id="trayBtn"
-          className={tray.count === 0 ? 'empty' : ''}
-          title={panelOpen ? 'Close' : 'My pages'}
-          onClick={panelOpen ? closeRight : openTray}
-        >
-          {panelOpen ? (
-            <span className="trayX" aria-hidden="true">
-              ✕
-            </span>
-          ) : (
-            <svg className="trayIcon" viewBox="0 0 24 24" aria-hidden="true">
-              <rect x="3.5" y="3.5" width="7.5" height="7.5" rx="2" />
-              <rect x="13" y="3.5" width="7.5" height="7.5" rx="2" />
-              <rect x="3.5" y="13" width="7.5" height="7.5" rx="2" />
-              <rect x="13" y="13" width="7.5" height="7.5" rx="2" />
-            </svg>
-          )}
-          {!panelOpen && tray.unseen > 0 && <span id="trayBadge">{tray.unseen}</span>}
-        </button>
-      </div>
+      <CornerControls
+        cornerRef={cornerRef}
+        initials={user?.initials || '··'}
+        trayCount={tray.count}
+        unseen={tray.unseen}
+        panelOpen={panelOpen}
+        onSwitchUser={switchUser}
+        onTogglePanel={panelOpen ? closeRight : openTray}
+      />
 
       {toast && (
         <div
@@ -916,43 +779,6 @@ export default function Kiosk() {
       )}
 
       {menuOpen && <ParentMenu onClose={() => setMenuOpen(false)} />}
-    </div>
-  );
-}
-
-function ArtifactCard({
-  artifact,
-  onOpen,
-  onRetry,
-}: {
-  artifact: Artifact;
-  onOpen: () => void;
-  onRetry: () => void;
-}) {
-  const cls = artifact.status === 'ready' ? 'ready' : artifact.status === 'failed' ? 'failed' : '';
-  const ready = artifact.status === 'ready';
-  const failed = artifact.status === 'failed';
-  return (
-    <div
-      className={`artcard ${cls}`}
-      style={{ ['--est' as any]: '12s' }}
-      onClick={() => (failed ? onRetry() : onOpen())}
-    >
-      <div className="fill" />
-      <div className="inner">
-        <div className="emoji">{artifact.emoji || '✨'}</div>
-        <div className="meta">
-          <div className="t">{artifact.title}</div>
-          <div className="p">
-            {failed
-              ? "That one didn't work."
-              : ready
-                ? artifact.plan || 'Ready to explore!'
-                : 'Making your page…'}
-          </div>
-        </div>
-        <div className="go">{failed ? 'Try again ↻' : ready ? 'OPEN →' : '●●●'}</div>
-      </div>
     </div>
   );
 }
