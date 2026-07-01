@@ -16,10 +16,9 @@ voices/
 vendor/
 .venv-piper/
 
-# Kokoro TTS sidecar (created by: npm run setup-kokoro)
+# Kokoro TTS sidecar (created by: npm run setup-kokoro) — model + generated unit file
 .venv-kokoro/
-kokoro/*.onnx
-kokoro/*.bin
+/kokoro/
 
 # Wake-word add-on venv (created by: install.sh)
 .venv-wake/

@@ -88,21 +88,27 @@ async function download(name) {
     log(`  curl -s -o /tmp/k.wav -w "synth time: %{time_total}s\\n" -X POST ${KOKORO_URL} \\`);
     log(`    -H 'content-type: application/json' -d '{"input":"How natural does Kokoro sound now.","voice":"af_bella"}'`);
     log('  # (that clip is ~2.5s of audio — under that synth time = faster than real-time = gapless)');
-    log('\nRun it on boot as a service (paste this block):');
-    log(`  sudo tee /etc/systemd/system/wondry-kokoro.service >/dev/null <<UNIT
-  [Unit]
-  Description=Wondry Kokoro TTS sidecar
-  After=network.target
-  [Service]
-  WorkingDirectory=${ROOT}
-  Environment=KOKORO_PORT=${PORT}
-  ExecStart=${venvPython} ${path.join(ROOT, 'tools', 'kokoro', 'server.py')}
-  Restart=always
-  User=${process.env.USER || 'pi'}
-  [Install]
-  WantedBy=multi-user.target
-  UNIT
-  sudo systemctl enable --now wondry-kokoro`);
+    // Write the systemd unit to a file (no error-prone heredoc paste) — the user just
+    // copies it into place with sudo. Only enable it once the foreground run works.
+    const unit = `[Unit]
+Description=Wondry Kokoro TTS sidecar
+After=network.target
+
+[Service]
+WorkingDirectory=${ROOT}
+Environment=KOKORO_PORT=${PORT}
+ExecStart=${venvPython} ${path.join(ROOT, 'tools', 'kokoro', 'server.py')}
+Restart=always
+User=${process.env.USER || 'pi'}
+
+[Install]
+WantedBy=multi-user.target
+`;
+    const unitPath = path.join(KDIR, 'wondry-kokoro.service');
+    try { fs.writeFileSync(unitPath, unit); } catch {}
+    log('\nOnce the foreground test above sounds good, run it on boot:');
+    log(`  sudo cp ${unitPath} /etc/systemd/system/wondry-kokoro.service`);
+    log('  sudo systemctl enable --now wondry-kokoro');
     log('\nThen:  wondry restart   →   parent console → Kids → Voice → Kokoro → pick one → ▶ Hear voice.');
   }
   void nodeBin;
